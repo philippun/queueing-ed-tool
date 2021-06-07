@@ -7,8 +7,8 @@ settings <- function() {
         sliderInput("arrivalRate",
                     "Arrival rate:",
                     min = 1,
-                    max = 10,
-                    value = 5),
+                    max = 20,
+                    value = 10),
         h3("Hospitals"),
         checkboxInput("pooled",
                       "Pool queues",
@@ -54,11 +54,20 @@ server <- function(input, output, session) {
     scheduledCount <- 0
     arrivalMax <- 500
     pooled <- TRUE
-    progressionRate <- 1000
+    fastRate <- 10000
+    mediumRate <- 30000
+    slowRate <- 50000
+    progressionRate <- mediumRate
+    
+    arrivalRateX <- 10
+    arrivalRateY <- 10
+    serviceRateX <- 10
+    serviceRateY <- 10
     
     # set up waiting queue
-    waitingQueue <- data.frame(matrix(ncol = 2, nrow = 0))
-    colnames(waitingQueue) <- c('id', 'type')
+      # waitingQueue <- data.frame(matrix(ncol = 2, nrow = 0))
+      # colnames(waitingQueue) <- c('id', 'type')
+    waitingQueue <- data.frame(id = integer(), type = character())
     
     # set up future event list (FEL)
     futureEventList <- data.frame(time = double(), type = character())
@@ -67,11 +76,19 @@ server <- function(input, output, session) {
     doctorXIdle <- TRUE
     doctorYIdle <- TRUE
     
+    observe({
+        arrivalRateX <<- input$arrivalRate
+        print(paste0("Arrival rate changed to: ", arrivalRateX))
+    })
+    
+    
     # generate random number from exp dist and truncate
     genRand <- function() {
-        num <- rexp(1)
-        if (num > 4) {
-            4
+        rate <- arrivalRateX # can be seen as avg patients arriving per hour
+        trunc <- 4
+        num <- rexp(1, rate = rate)
+        if (num > (trunc * 1 / rate)) {
+            (trunc * 1 / rate)
         } else {
             num
         }
@@ -147,6 +164,7 @@ server <- function(input, output, session) {
     
     # main loop
     observe({
+        print(timeUntilNextEvent)
         invalidateLater(timeUntilNextEvent * progressionRate)
         
         # A Phase
@@ -160,16 +178,16 @@ server <- function(input, output, session) {
         # B Phase
         if (event[1,2] == "arrivalX") {
             modelArrival("X")
-            print("Patient of type X arrived")
+            # print("Patient of type X arrived")
         } else if (event[1,2] == "arrivalY") {
             modelArrival("Y")
-            print("Patient of type Y arrived")
+            # print("Patient of type Y arrived")
         } else if (event[1,2] == "departureX") {
             modelDeparture("X")
-            print("Patient of type X left")
+            # print("Patient of type X left")
         } else if (event[1,2] == "departureY") {
             modelDeparture("Y")
-            print("Patient of type Y left")
+            # print("Patient of type Y left")
         }
         
         # C Phase
@@ -188,9 +206,8 @@ server <- function(input, output, session) {
         }
         
         
-        timeUntilNextEvent <- as.numeric(futureEventList[1,1]) - clock
+        timeUntilNextEvent <<- as.numeric(futureEventList[1,1]) - clock
     })
-    
 }
 
 shinyApp(ui, server)
