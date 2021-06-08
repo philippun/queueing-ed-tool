@@ -98,7 +98,31 @@ server <- function(input, output, session) {
                    type = character())
     
     # set up idle doctors
-    doctorIdle <- c(X = TRUE, Y = FALSE)
+    # doctorIdle <- c(X = TRUE, Y = FALSE)
+    doctorCare <- c(X = NA, Y = NA)
+    
+    patientStats <-
+        data.frame(
+            id = integer(),
+            type = character(),
+            arrivalTime = double(),
+            startMedical = double(),
+            endMedical = double()
+        )
+    
+    logPatient <- function(id, type) {
+        patient <- data.frame(
+            id = as.integer(id),
+            type = type,
+            arrivalTime = NA,
+            startMedical = NA,
+            endMedical = NA)
+        patientStats <<- rbind(patientStats, patient)
+    }
+    
+    logPatientTime <- function(id, col, time) {
+        patientStats[patientStats$id == id, col] <<- time
+    }
     
     
     ####################################
@@ -152,12 +176,18 @@ server <- function(input, output, session) {
     dequeue <- function(type, currentlyPooled) {
         if (currentlyPooled) {
             # print(paste0("Took in patient of type ", waitingQueue[1,2]))
+            patientId <- waitingQueue[1, 1]
+            doctorCare[type] <<- patientId
             waitingQueue <<- waitingQueue[-c(1), ]
+            logPatientTime(patientId, "startMedical", clock)
         } else {
             for (i in 1:nrow(waitingQueue)) {
                 if (waitingQueue[i, "type"] == type) {
                     # print(paste0("Took in patient of type ", waitingQueue[i,2]))
+                    patientId <- waitingQueue[i, 1]
+                    doctorCare[type] <<- patientId
                     waitingQueue <<- waitingQueue[-c(i), ]
+                    logPatientTime(patientId, "startMedical", clock)
                     break
                 }
             }
@@ -179,6 +209,8 @@ server <- function(input, output, session) {
     modelArrival <- function(type) {
         arrivalCount <<- arrivalCount + 1
         enqueue(type)
+        logPatient(arrivalCount, type)
+        logPatientTime(arrivalCount, "arrivalTime", clock)
         
         if (scheduledCount < arrivalMax) {
             addEvent("arrival", type) # schedule next arrival
@@ -188,12 +220,9 @@ server <- function(input, output, session) {
     
     # patient departure
     modelDeparture <- function(type) {
-        doctorIdle[type] <<- TRUE
-        # if (type == "X") {
-        #     doctorXIdle <<- TRUE
-        # } else {
-        #     doctorYIdle <<- TRUE
-        # }
+        # doctorIdle[type] <<- TRUE
+        logPatientTime(doctorCare[type], "endMedical", clock)
+        doctorCare[type] <<- NA
     }
     
     ##################################
@@ -233,15 +262,15 @@ server <- function(input, output, session) {
         
         # C Phase
         currentlyPooled <- pooled
-        if (doctorIdle['X'] &&
+        if (is.na(doctorCare['X']) &&
             isPatientWaiting("X", currentlyPooled)) {
-            doctorIdle['X'] <<- FALSE
+            # doctorIdle['X'] <<- FALSE
             dequeue("X", currentlyPooled)
             addEvent("departure", "X") # schedule next departure
         }
-        if (doctorIdle['Y'] &&
+        if (is.na(doctorCare['Y']) &&
             isPatientWaiting("Y", currentlyPooled)) {
-            doctorIdle['Y'] <<- FALSE
+            # doctorIdle['Y'] <<- FALSE
             dequeue("Y", currentlyPooled)
             addEvent("departure", "Y") # schedule next departure
         }
@@ -251,6 +280,8 @@ server <- function(input, output, session) {
         print(paste0("Until next: ", timeUntilNextEvent))
         if (input$play) {
             invalidateLater(timeUntilNextEvent * progressionRate)
+        } else {
+            print(patientStats)
         }
     })
     
