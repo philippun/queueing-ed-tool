@@ -1,4 +1,5 @@
 library(shiny)
+library(jsonlite)
 
 ################
 ### START UI ###
@@ -152,8 +153,10 @@ server <- function(input, output, session) {
         if (event == "arrival") {
             rate <-
                 arrivalRate[type] # can be seen as avg patients arriving per hour
+            min <- 0
         } else if (event == "departure") {
             rate <- serviceRate[type]
+            min <- 0.1
         } else {
             print("ERROR: event was neither arrival nor departure.")
         }
@@ -161,9 +164,9 @@ server <- function(input, output, session) {
         trunc <- 4
         num <- rexp(1, rate = rate)
         if (num > (trunc * 1 / rate)) {
-            (trunc * 1 / rate)
+            (trunc * 1 / rate) + min
         } else {
-            num
+            num + min
         }
     }
     
@@ -266,6 +269,9 @@ server <- function(input, output, session) {
         futureEventList <<- futureEventList[-c(1), ]
         clock <<- as.numeric(event[1, 1])
         print(paste0("Time: ", clock))
+        
+        data <- toJSON(waitingQueue)
+        session$sendCustomMessage("update-waiting", data)
         
         # B Phase
         if (event[1, ]$event == "arrival") {
