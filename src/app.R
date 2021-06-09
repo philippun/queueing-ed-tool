@@ -7,35 +7,41 @@ library(shiny)
 settings <- function() {
     tabPanel(
         "Settings",
+        h3("Hospital"),
+        numericInput("patientTypes", 
+                     "Types of patients:", 
+                     value = 2, 
+                     min = 2, 
+                     max = 2, 
+                     step = 1),
+        checkboxInput("pooled",
+                      "Pool patients/queues",
+                      value = TRUE),
         h3("Patients"),
         sliderInput(
             "arrivalRateX",
-            "Arrival rate X:",
+            "Arrival rate patient type 1:",
             min = 1,
             max = 20,
             value = 9
         ),
-        sliderInput(
-            "arrivalRateY",
-            "Arrival rate Y:",
-            min = 1,
-            max = 20,
-            value = 9
-        ),
-        h3("Hospitals"),
-        checkboxInput("pooled",
-                      "Pool queues",
-                      value = TRUE),
         sliderInput(
             "serviceRateX",
-            "Service rate X:",
+            "Service rate patient type 1:",
             min = 1,
             max = 20,
             value = 11
         ),
         sliderInput(
+            "arrivalRateY",
+            "Arrival rate patient type 2:",
+            min = 1,
+            max = 20,
+            value = 9
+        ),
+        sliderInput(
             "serviceRateY",
-            "Service rate Y:",
+            "Service rate patient type 2:",
             min = 1,
             max = 20,
             value = 11
@@ -51,22 +57,27 @@ scenarios <- function() {
 }
 
 app <- function() {
-    sidebarLayout(sidebarPanel(
-        checkboxInput("play",
-                      "Play/Pause",
-                      value = TRUE),
-        tabsetPanel(settings(),
-                    scenarios()),
-        width = 3
-    ),
-    mainPanel())
+    sidebarLayout(
+        sidebarPanel(
+            checkboxInput("play",
+                          "Play/Pause",
+                          value = TRUE),
+            tabsetPanel(settings(),
+                        scenarios()),
+            width = 3),
+        mainPanel(
+            div(class="animation")
+        ))
 }
 
 ui <- navbarPage(
     "Queueing Education Tool",
+    tags$head(tags$script(src = "https://d3js.org/d3.v5.min.js"),
+              tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")),
     selected = "App",
     tabPanel("App", app()),
-    tabPanel("About", includeMarkdown("about.md"))
+    tabPanel("About", includeMarkdown("about.md")),
+    tags$script(src = "app.js")
 )
 
 #############################
@@ -98,9 +109,9 @@ server <- function(input, output, session) {
                    type = character())
     
     # set up idle doctors
-    # doctorIdle <- c(X = TRUE, Y = FALSE)
     doctorCare <- c(X = NA, Y = NA)
     
+    # statistics stuff
     patientStats <-
         data.frame(
             id = integer(),
@@ -114,14 +125,21 @@ server <- function(input, output, session) {
         patient <- data.frame(
             id = as.integer(id),
             type = type,
-            arrivalTime = NA,
-            startMedical = NA,
-            endMedical = NA)
+            arrivalTime = as.double(NA),
+            startMedical = as.double(NA),
+            endMedical = as.double(NA))
         patientStats <<- rbind(patientStats, patient)
     }
     
     logPatientTime <- function(id, col, time) {
         patientStats[patientStats$id == id, col] <<- time
+    }
+    
+    calcAvgWaiting <- function() {
+        relevantData <- na.omit(patientStats)
+        relevantData <- tail(relevantData, 20)
+        relevantTime <- relevantData$startMedical - relevantData$arrivalTime
+        mean(relevantTime)
     }
     
     
@@ -198,7 +216,6 @@ server <- function(input, output, session) {
     # considers if queues are currently pooled or not
     isPatientWaiting <- function(type, currentlyPooled) {
         if (currentlyPooled) {
-            # check if doctor should care for patient type
             nrow(waitingQueue) > 0
         } else {
             any(waitingQueue == type)
@@ -220,9 +237,9 @@ server <- function(input, output, session) {
     
     # patient departure
     modelDeparture <- function(type) {
-        # doctorIdle[type] <<- TRUE
         logPatientTime(doctorCare[type], "endMedical", clock)
         doctorCare[type] <<- NA
+        print(paste0("Avg waiting time: ", calcAvgWaiting()))
     }
     
     ##################################
@@ -257,20 +274,17 @@ server <- function(input, output, session) {
             modelDeparture(event[1, ]$type)
         } else {
             print("ERROR: undefined event.")
-            
         }
         
         # C Phase
         currentlyPooled <- pooled
         if (is.na(doctorCare['X']) &&
             isPatientWaiting("X", currentlyPooled)) {
-            # doctorIdle['X'] <<- FALSE
             dequeue("X", currentlyPooled)
             addEvent("departure", "X") # schedule next departure
         }
         if (is.na(doctorCare['Y']) &&
             isPatientWaiting("Y", currentlyPooled)) {
-            # doctorIdle['Y'] <<- FALSE
             dequeue("Y", currentlyPooled)
             addEvent("departure", "Y") # schedule next departure
         }
