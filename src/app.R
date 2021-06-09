@@ -196,7 +196,6 @@ server <- function(input, output, session) {
     # considers if queues are currently pooled or not
     dequeue <- function(type, currentlyPooled) {
         if (currentlyPooled) {
-            # print(paste0("Took in patient of type ", waitingQueue[1,2]))
             patientId <- waitingQueue[1, 1]
             doctorCare[type] <<- patientId
             waitingQueue <<- waitingQueue[-c(1), ]
@@ -270,7 +269,11 @@ server <- function(input, output, session) {
         clock <<- as.numeric(event[1, 1])
         print(paste0("Time: ", clock))
         
-        data <- toJSON(waitingQueue)
+        # send waiting queue to JS
+        gettingMedical <- data.frame(id = as.integer(c(doctorCare['X'], doctorCare['Y'])), type = as.character(c("atX", "atY")))
+        gettingMedical <- na.omit(gettingMedical)
+        data <- rbind(gettingMedical, waitingQueue)
+        data <- toJSON(data)
         session$sendCustomMessage("update-waiting", data)
         
         # B Phase
