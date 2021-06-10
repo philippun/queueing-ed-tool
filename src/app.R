@@ -150,24 +150,25 @@ server <- function(input, output, session) {
     
     # generate random number from exp dist and truncate
     genRand <- function(event, type) {
-        if (event == "arrival") {
-            rate <-
-                arrivalRate[type] # can be seen as avg patients arriving per hour
-            min <- 0
-        } else if (event == "departure") {
-            rate <- serviceRate[type]
-            min <- 0.1
-        } else {
-            print("ERROR: event was neither arrival nor departure.")
-        }
-        
-        trunc <- 4
-        num <- rexp(1, rate = rate)
-        if (num > (trunc * 1 / rate)) {
-            (trunc * 1 / rate) + min
-        } else {
-            num + min
-        }
+        # if (event == "arrival") {
+        #     rate <-
+        #         arrivalRate[type] # can be seen as avg patients arriving per hour
+        #     min <- 0
+        # } else if (event == "departure") {
+        #     rate <- serviceRate[type]
+        #     min <- 0.1
+        # } else {
+        #     print("ERROR: event was neither arrival nor departure.")
+        # }
+        # 
+        # trunc <- 4
+        # num <- rexp(1, rate = rate)
+        # if (num > (trunc * 1 / rate)) {
+        #     (trunc * 1 / rate) + min
+        # } else {
+        #     num + min
+        # }
+        0.1
     }
     
     # add a new event to the Future Event List
@@ -263,27 +264,32 @@ server <- function(input, output, session) {
     observe({
         # invalidateLater(timeUntilNextEvent * progressionRate)
         
-        # A Phase
-        event <- futureEventList[1,]
-        futureEventList <<- futureEventList[-c(1), ]
-        clock <<- as.numeric(event[1, 1])
-        print(paste0("Time: ", clock))
-        
-        # send waiting queue to JS
-        gettingMedical <- data.frame(id = as.integer(c(doctorCare['X'], doctorCare['Y'])), type = as.character(c("atX", "atY")))
+        # send state of system to JS
+        gettingMedical <-
+            data.frame(id = as.integer(c(doctorCare['X'], doctorCare['Y'])), type = as.character(c("atX", "atY")))
         gettingMedical <- na.omit(gettingMedical)
         data <- rbind(gettingMedical, waitingQueue)
         data <- toJSON(data)
         session$sendCustomMessage("update-waiting", data)
         
-        # B Phase
-        if (event[1, ]$event == "arrival") {
-            modelArrival(event[1, ]$type)
-        } else if (event[1, ]$event == "departure") {
-            modelDeparture(event[1, ]$type)
-        } else {
-            print("ERROR: undefined event.")
+        # A Phase
+        clock <<- as.numeric(futureEventList[1, 1])
+        
+        while (futureEventList[1, 1] == clock) {
+            event <- futureEventList[1,]
+            futureEventList <<- futureEventList[-c(1), ]
+            print(paste0("Time: ", clock))
+            
+            # B Phase
+            if (event[1, ]$event == "arrival") {
+                modelArrival(event[1, ]$type)
+            } else if (event[1, ]$event == "departure") {
+                modelDeparture(event[1, ]$type)
+            } else {
+                print("ERROR: undefined event.")
+            }
         }
+        
         
         # C Phase
         currentlyPooled <- pooled
