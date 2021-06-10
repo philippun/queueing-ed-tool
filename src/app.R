@@ -67,9 +67,9 @@ app <- function() {
                         scenarios()),
             width = 3),
         mainPanel(
-            div(class="top", span(class="animation"), span(class="statusinfo"))
-            # div(class="animation"),
-            # div(class="statusinfo")
+            div(class="top", div(class="animation"), div(class="statusinfo", "test")),
+            div(class="bottom", div(class="graph")),
+            width = 9
         ))
 }
 

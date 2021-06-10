@@ -1,3 +1,21 @@
+.top {
+    display: grid;
+    grid-template-columns: 7fr 3fr;
+    grid-gap: 1em;
+}
+
 .animation {
     background: #E6E6E3;
+}
+
+.statusinfo {
+    background: #eee;
+}
+
+.bottom {
+    width: 100px;
+}
+
+.graph {
+    background: #ddd;
 }
