@@ -67,7 +67,9 @@ app <- function() {
                         scenarios()),
             width = 3),
         mainPanel(
-            div(class="animation")
+            div(class="top", span(class="animation"), span(class="statusinfo"))
+            # div(class="animation"),
+            # div(class="statusinfo")
         ))
 }
 
@@ -150,25 +152,25 @@ server <- function(input, output, session) {
     
     # generate random number from exp dist and truncate
     genRand <- function(event, type) {
-        # if (event == "arrival") {
-        #     rate <-
-        #         arrivalRate[type] # can be seen as avg patients arriving per hour
-        #     min <- 0
-        # } else if (event == "departure") {
-        #     rate <- serviceRate[type]
-        #     min <- 0.1
-        # } else {
-        #     print("ERROR: event was neither arrival nor departure.")
-        # }
-        # 
-        # trunc <- 4
-        # num <- rexp(1, rate = rate)
-        # if (num > (trunc * 1 / rate)) {
-        #     (trunc * 1 / rate) + min
-        # } else {
-        #     num + min
-        # }
-        0.1
+        if (event == "arrival") {
+            rate <-
+                arrivalRate[type] # can be seen as avg patients arriving per hour
+            min <- 0
+        } else if (event == "departure") {
+            rate <- serviceRate[type]
+            min <- 0.1
+        } else {
+            print("ERROR: event was neither arrival nor departure.")
+        }
+
+        trunc <- 4
+        num <- rexp(1, rate = rate)
+        if (num > (trunc * 1 / rate)) {
+            (trunc * 1 / rate) + min
+        } else {
+            num + min
+        }
+        # 0.1
     }
     
     # add a new event to the Future Event List
