@@ -89,6 +89,7 @@ ui <- navbarPage(
 
 server <- function(input, output, session) {
     # constants
+    queueMax <- 10
     arrivalMax <- 10000
     fastRate <- 10000
     mediumRate <- 30000
@@ -99,7 +100,7 @@ server <- function(input, output, session) {
     arrivalCount <- 0
     scheduledCount <- 0
     pooled <- TRUE
-    progressionRate <- mediumRate
+    progressionRate <- 5000 #mediumRate
     
     arrivalRate <- c(X = 9, Y = 9)
     serviceRate <- c(X = 11, Y = 11)
@@ -115,6 +116,13 @@ server <- function(input, output, session) {
     doctorCare <- c(X = NA, Y = NA)
     
     # statistics stuff
+    statistics <- 
+        data.frame(
+            avgWaitingTimeX = double(),
+            avgWaitingTimeY = double(),
+            avgPatientsInQueue = double()
+        )
+    
     patientStats <-
         data.frame(
             id = integer(),
@@ -122,6 +130,13 @@ server <- function(input, output, session) {
             arrivalTime = double(),
             startMedical = double(),
             endMedical = double()
+        )
+    
+    systemStats <-
+        data.frame(
+            time = double(),
+            queuedPatientsX = integer(),
+            queuedPatientsY = integer()
         )
     
     logPatient <- function(id, type) {
@@ -132,17 +147,57 @@ server <- function(input, output, session) {
             startMedical = as.double(NA),
             endMedical = as.double(NA))
         patientStats <<- rbind(patientStats, patient)
+        patientStats <<- tail(patientStats, 80) # privacy regulations
     }
     
     logPatientTime <- function(id, col, time) {
         patientStats[patientStats$id == id, col] <<- time
     }
     
-    calcAvgWaiting <- function() {
+    calcAvgWaitingTime <- function(type = "") { 
         relevantData <- na.omit(patientStats)
-        relevantData <- tail(relevantData, 20)
+        relevantData <- tail(relevantData, 20) # last 20 completed patients
+        if (type != "") {
+            relevantData <- subset(relevantData, type = type)
+        }
         relevantTime <- relevantData$startMedical - relevantData$arrivalTime
         mean(relevantTime)
+    }
+    
+    calcQueueLength <- function(patientType) {
+        nrow(subset(waitingQueue, type == patientType))
+        
+        # if (pooled) {
+        #     nrow(waitingQueue)
+        # } else {
+        #     nrow(subset(waitingQueue, type == patientType))
+        # }
+    }
+    
+    logSystem <- function() {
+        currentSystem <- data.frame(
+            time = clock,
+            queuedPatientsX = calcQueueLength("X"),
+            queuedPatientsY = calcQueueLength("Y")
+        )
+        systemStats <<- rbind(systemStats, currentSystem)
+        systemStats <<- tail(systemStats, 80)
+    }
+    
+    calcAvgPatientsInQueue <- function() {
+        queuedPatients <- systemStats$queuedPatientsX + systemStats$queuedPatientsY
+        queuedPatients <- tail(queuedPatients, 20)
+        mean(queuedPatients)
+    }
+    
+    extendStatistics <- function() {
+        newRow <- data.frame(
+            avgWaitingTimeX = calcAvgWaitingTime("X"),
+            avgWaitingTimeY = calcAvgWaitingTime("Y"),
+            avgPatientsInQueue = calcAvgPatientsInQueue()
+        )
+        statistics <<- rbind(statistics, newRow)
+        statistics <<- tail(statistics, 80)
     }
     
     
@@ -227,12 +282,31 @@ server <- function(input, output, session) {
         }
     }
     
+    # calcQueueMax <- function() {
+    #     if (pooled) {
+    #         2 * queueMax
+    #     } else {
+    #         queueMax
+    #     }
+    # }
+    
     # patient arrival
-    modelArrival <- function(type) {
-        arrivalCount <<- arrivalCount + 1
-        enqueue(type)
-        logPatient(arrivalCount, type)
-        logPatientTime(arrivalCount, "arrivalTime", clock)
+    modelArrival <- function(type, currentlyPooled) {
+        if (currentlyPooled) {
+            if (nrow(waitingQueue) < 2 * queueMax) {
+                arrivalCount <<- arrivalCount + 1
+                enqueue(type)
+                logPatient(arrivalCount, type)
+                logPatientTime(arrivalCount, "arrivalTime", clock)
+            }
+        } else {
+            if (calcQueueLength(type) < queueMax) {
+                arrivalCount <<- arrivalCount + 1
+                enqueue(type)
+                logPatient(arrivalCount, type)
+                logPatientTime(arrivalCount, "arrivalTime", clock)
+            }
+        }
         
         if (scheduledCount < arrivalMax) {
             addEvent("arrival", type) # schedule next arrival
@@ -243,8 +317,13 @@ server <- function(input, output, session) {
     # patient departure
     modelDeparture <- function(type) {
         logPatientTime(doctorCare[type], "endMedical", clock)
+        logSystem()
+        extendStatistics()
+        
+        data <- toJSON(statistics)
+        session$sendCustomMessage("update-graph", data)
+        
         doctorCare[type] <<- NA
-        print(paste0("Avg waiting time: ", calcAvgWaiting()))
     }
     
     ##################################
@@ -276,15 +355,16 @@ server <- function(input, output, session) {
         
         # A Phase
         clock <<- as.numeric(futureEventList[1, 1])
+        currentlyPooled <- pooled
         
-        while (futureEventList[1, 1] == clock) {
+        while (futureEventList[1, 1] == clock) { # some bug here where the FEL can be empty?
             event <- futureEventList[1,]
             futureEventList <<- futureEventList[-c(1), ]
             print(paste0("Time: ", clock))
             
             # B Phase
             if (event[1, ]$event == "arrival") {
-                modelArrival(event[1, ]$type)
+                modelArrival(event[1, ]$type, currentlyPooled)
             } else if (event[1, ]$event == "departure") {
                 modelDeparture(event[1, ]$type)
             } else {
@@ -294,7 +374,6 @@ server <- function(input, output, session) {
         
         
         # C Phase
-        currentlyPooled <- pooled
         if (is.na(doctorCare['X']) &&
             isPatientWaiting("X", currentlyPooled)) {
             dequeue("X", currentlyPooled)

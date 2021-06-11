@@ -1,15 +1,34 @@
+const graphHeight = 320;
+const graphWidth = 1000;
+const graphMargin = { top: 20, right: 20, bottom: 25, left: 30};
+const graphInnerWidth = graphWidth - graphMargin.left - graphMargin.right;
+const graphInnerHeight = graphHeight - graphMargin.top - graphMargin.bottom;
+
 function setUpAnimation() {
   const height = 320;
   const width = 850;
 
   //append svg to designated element
   let svg = d3
-    .select(".animation") //.animation created in Shiny
+    .select(".animation") //.animation div created in Shiny
     .append("svg")
+    .attr("class", "animation-svg")
     .attr("preserveAspectRatio", "xMinYMin meet")
     .attr("viewBox", `0 0 ${width} ${height}`);
 
   svg.append("image").attr("xlink:href", "animation_background.svg");
+}
+
+function setUpGraph() {
+    let svg = d3
+      .select(".graph")
+      .append("svg")
+      .attr("preserveAspectRatio", "xMinYMin meet")
+      .attr("viewBox", `0 0 ${graphWidth} ${graphHeight}`);
+
+     let g = svg.append("g")
+        .attr("class", "graph-group")
+        .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
 }
 
 function renderAnimation(patients) {
@@ -17,11 +36,13 @@ function renderAnimation(patients) {
     d.hasOwnProperty("pos") ? (9 - d.pos) * 44 + 46 : 9; //62
 
   const yPosition = (d, i) => {
-    if (d.type === "X" || d.type === "atX") {
+    return 106 + d.queue * 144;
+
+    /*if (d.type === "X" || d.type === "atX") {
       return 106; // + 16;
     } else if (d.type === "Y" || d.type === "atY") {
       return 106 + 144; // + 16;
-    }
+  }*/
   };
 
   const colorScale = d3
@@ -110,9 +131,11 @@ function renderAnimation(patients) {
     .attr("stroke", "white");
   groupsEnter
     .append("text")
-    .text((d) => d.pos)
+    .text((d) => d.id)
     .attr("y", 60);
 
+  // pattern first used to create circles for the patients
+  // Not needed anymore but for reference
   /*const circles = svg.selectAll('circle')
         .data(patients, d => d.id);
       circles
@@ -131,28 +154,101 @@ function renderAnimation(patients) {
         .remove();*/
 }
 
+function renderGraph(data) {
+    const xValue = (d, i) => i;
+    const yValue = d => d.avgPatientsInQueue;
+
+    const xScaleBand = d3.scaleBand()
+        .domain(d3.range(0, 99))
+        .range([0, graphInnerWidth])
+        .padding(0.1);
+
+    const ScalePoint = d3.scalePoint()
+        .domain(data.map(xValue))
+        .range([0, innerWidth])
+        .padding(0.5);
+
+    const yScale = d3.scaleLinear()
+        .domain([0, 22])
+        .range([graphInnerHeight, 0]);
+
+    let graph = d3.select(".graph-group")
+
+    let avgPatientsInQueue = graph.selectAll("rect")
+        .data(data)
+    avgPatientsInQueue
+        .enter().append("rect")
+            .attr("fill", "gray")
+
+        .merge(avgPatientsInQueue)
+            .attr("x", (d, i) => xScaleBand(i))
+            .attr("width", xScaleBand.bandwidth())
+            .attr("y", d => yScale(yValue(d)))
+            .attr("height", d => yScale(0) - yScale(yValue(d)));
+    avgPatientsInQueue.exit().remove();
+}
+
 setUpAnimation();
-//renderAnimation();
+setUpGraph();
 
 Shiny.addCustomMessageHandler("update-waiting", function (data) {
   console.log(data);
 
-  positionX = 0;
-  positionY = 0;
-  for (let i in data) {
-    //console.log(data[i])
-    if (data[i].type === "X") {
-      data[i].pos = positionX;
-      positionX++;
-    } else if (data[i].type === "Y") {
-      data[i].pos = positionY;
-      positionY++;
-    } else if (data[i].type === "atX") {
-      data[i].pos = -3;
-    } else if (data[i].type === "atY") {
-      data[i].pos = -3;
+  if (document.getElementById('pooled').checked) {
+      d3.select(".animation-svg").selectAll(".wall-image")
+        .data([1]).enter()
+        .append("image")
+        .attr("xlink:href", "wall.svg")
+        .attr("class", "wall-image")
+        .attr("x", 480)
+        .attr("y", 238);
+
+      // position if pooled
+      position = 0;
+      for (let i in data) {
+          if (data[i].type === "atX") {
+            data[i].pos = -3;
+            data[i].queue = 0;
+          } else if (data[i].type === "atY") {
+            data[i].pos = -3;
+            data[i].queue = 1;
+        } else {
+            data[i].queue = position < 10 ? 0 : 1;
+            data[i].pos = position - (data[i].queue * 10);
+            position++;
+        }
+      }
+  } else {
+      d3.select(".wall-image").remove();
+
+      // position if not pooled
+      positionX = 0;
+      positionY = 0;
+      for (let i in data) {
+        //console.log(data[i])
+        if (data[i].type === "X") {
+          data[i].pos = positionX;
+          data[i].queue = 0;
+          positionX++;
+        } else if (data[i].type === "Y") {
+          data[i].pos = positionY;
+          data[i].queue = 1;
+          positionY++;
+        } else if (data[i].type === "atX") {
+          data[i].pos = -3;
+          data[i].queue = 0;
+        } else if (data[i].type === "atY") {
+          data[i].pos = -3;
+          data[i].queue = 1;
+        }
     }
   }
 
   renderAnimation(data);
+});
+
+Shiny.addCustomMessageHandler("update-graph", function(data) {
+    console.log(data);
+
+    renderGraph(data);
 });
