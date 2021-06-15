@@ -29,6 +29,10 @@ function setUpGraph() {
      let g = svg.append("g")
         .attr("class", "graph-group")
         .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
+
+    svg.append("g")
+        .attr("class", "waiting-group")
+        .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
 }
 
 function renderAnimation(patients) {
@@ -157,22 +161,29 @@ function renderAnimation(patients) {
 function renderGraph(data) {
     const xValue = (d, i) => i;
     const yValue = d => d.avgPatientsInQueue;
+    const yValueWaitingX = d => d.avgWaitingTimeX;
+    const yValueWaitingY = d => d.avgWaitingTimeY;
 
     const xScaleBand = d3.scaleBand()
         .domain(d3.range(0, 99))
         .range([0, graphInnerWidth])
         .padding(0.1);
 
-    const ScalePoint = d3.scalePoint()
-        .domain(data.map(xValue))
-        .range([0, innerWidth])
+    const xScalePoint = d3.scalePoint()
+        //.domain(data.map(xValue))
+        .domain(d3.range(0, 99))
+        .range([0, graphInnerWidth])
         .padding(0.5);
 
     const yScale = d3.scaleLinear()
         .domain([0, 22])
         .range([graphInnerHeight, 0]);
 
-    let graph = d3.select(".graph-group")
+    const yScaleWaiting = d3.scaleLinear()
+        .domain([0, 1])
+        .range([graphInnerHeight, 0]);
+
+    let graph = d3.select(".graph-group");
 
     let avgPatientsInQueue = graph.selectAll("rect")
         .data(data)
@@ -186,6 +197,43 @@ function renderGraph(data) {
             .attr("y", d => yScale(yValue(d)))
             .attr("height", d => yScale(0) - yScale(yValue(d)));
     avgPatientsInQueue.exit().remove();
+
+
+    let waitingGraph = d3.select(".waiting-group");
+
+    // avg waiting time x path
+    let avgWaitingTimeXLineGenerator = d3.line()
+        .x((d, i) => xScalePoint(i))
+        .y(d => yScaleWaiting(yValueWaitingX(d)))
+        .curve(d3.curveBasis);
+
+    let avgWaitingTimeX = waitingGraph.selectAll(".waitingX-path")
+        .data([data])
+    avgWaitingTimeX
+        .enter().append("path")
+          .attr("class", "waitingX-path")
+          .attr("stroke", "green")
+          .attr("stroke-width", 2)
+          .attr("fill", "none")
+        .merge(avgWaitingTimeX)
+          .attr("d", avgWaitingTimeXLineGenerator(data));
+
+  // avg waiting time y path
+  let avgWaitingTimeYLineGenerator = d3.line()
+      .x((d, i) => xScalePoint(i))
+      .y(d => yScaleWaiting(yValueWaitingY(d)))
+      .curve(d3.curveBasis);
+
+  let avgWaitingTimeY = waitingGraph.selectAll(".waitingY-path")
+      .data([data])
+  avgWaitingTimeY
+      .enter().append("path")
+        .attr("class", "waitingY-path")
+        .attr("stroke", "steelblue")
+        .attr("stroke-width", 2)
+        .attr("fill", "none")
+      .merge(avgWaitingTimeY)
+        .attr("d", avgWaitingTimeYLineGenerator(data));
 }
 
 setUpAnimation();
@@ -195,13 +243,13 @@ Shiny.addCustomMessageHandler("update-waiting", function (data) {
   console.log(data);
 
   if (document.getElementById('pooled').checked) {
-      d3.select(".animation-svg").selectAll(".wall-image")
+      /*d3.select(".animation-svg").selectAll(".wall-image")
         .data([1]).enter()
         .append("image")
         .attr("xlink:href", "wall.svg")
         .attr("class", "wall-image")
         .attr("x", 480)
-        .attr("y", 238);
+        .attr("y", 238);*/
 
       // position if pooled
       position = 0;
@@ -219,7 +267,7 @@ Shiny.addCustomMessageHandler("update-waiting", function (data) {
         }
       }
   } else {
-      d3.select(".wall-image").remove();
+      //d3.select(".wall-image").remove();
 
       // position if not pooled
       positionX = 0;

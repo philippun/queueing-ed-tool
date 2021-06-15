@@ -17,32 +17,33 @@ settings <- function() {
                      step = 1),
         checkboxInput("pooled",
                       "Pool patients/queues",
-                      value = TRUE),
-        h3("Patients"),
+                      value = FALSE),
+        h4("Green Patients"),
         sliderInput(
             "arrivalRateX",
-            "Arrival rate patient type 1:",
+            "Arrival rate:",
             min = 1,
             max = 20,
             value = 9
         ),
         sliderInput(
             "serviceRateX",
-            "Service rate patient type 1:",
+            "Service rate:",
             min = 1,
             max = 20,
             value = 11
         ),
+        h4("Blue Patients"),
         sliderInput(
             "arrivalRateY",
-            "Arrival rate patient type 2:",
+            "Arrival rate:",
             min = 1,
             max = 20,
             value = 9
         ),
         sliderInput(
             "serviceRateY",
-            "Service rate patient type 2:",
+            "Service rate:",
             min = 1,
             max = 20,
             value = 11
@@ -99,8 +100,8 @@ server <- function(input, output, session) {
     clock <- as.double(0)
     arrivalCount <- 0
     scheduledCount <- 0
-    pooled <- TRUE
-    progressionRate <- 5000 #mediumRate
+    pooled <- isolate(input$pooled)
+    progressionRate <- mediumRate #mediumRate
     
     arrivalRate <- c(X = 9, Y = 9)
     serviceRate <- c(X = 11, Y = 11)
@@ -154,14 +155,19 @@ server <- function(input, output, session) {
         patientStats[patientStats$id == id, col] <<- time
     }
     
-    calcAvgWaitingTime <- function(type = "") { 
+    calcAvgWaitingTime <- function(patientType = "") { 
         relevantData <- na.omit(patientStats)
         relevantData <- tail(relevantData, 20) # last 20 completed patients
-        if (type != "") {
-            relevantData <- subset(relevantData, type = type)
+        if (patientType != "") {
+            relevantData <- subset(relevantData, type == patientType)
         }
-        relevantTime <- relevantData$startMedical - relevantData$arrivalTime
-        mean(relevantTime)
+        if (nrow(relevantData) > 0) {
+            relevantTime <- relevantData$startMedical - relevantData$arrivalTime
+            mean(relevantTime)
+        } else {
+            0
+        }
+        
     }
     
     calcQueueLength <- function(patientType) {
@@ -207,25 +213,35 @@ server <- function(input, output, session) {
     
     # generate random number from exp dist and truncate
     genRand <- function(event, type) {
+        # if (event == "arrival") {
+        #     rate <-
+        #         arrivalRate[type] # can be seen as avg patients arriving per hour
+        #     min <- 0
+        # } else if (event == "departure") {
+        #     rate <- serviceRate[type]
+        #     min <- 0.1
+        # } else {
+        #     print("ERROR: event was neither arrival nor departure.")
+        # }
+        # 
+        # trunc <- 4
+        # num <- rexp(1, rate = rate)
+        # if (num > (trunc * 1 / rate)) {
+        #     (trunc * 1 / rate) + min
+        # } else {
+        #     num + min
+        # }
+        
         if (event == "arrival") {
             rate <-
                 arrivalRate[type] # can be seen as avg patients arriving per hour
-            min <- 0
         } else if (event == "departure") {
             rate <- serviceRate[type]
-            min <- 0.1
         } else {
             print("ERROR: event was neither arrival nor departure.")
         }
-
-        trunc <- 4
-        num <- rexp(1, rate = rate)
-        if (num > (trunc * 1 / rate)) {
-            (trunc * 1 / rate) + min
-        } else {
-            num + min
-        }
-        # 0.1
+        
+        1 / rate
     }
     
     # add a new event to the Future Event List
@@ -345,14 +361,6 @@ server <- function(input, output, session) {
     observe({
         # invalidateLater(timeUntilNextEvent * progressionRate)
         
-        # send state of system to JS
-        gettingMedical <-
-            data.frame(id = as.integer(c(doctorCare['X'], doctorCare['Y'])), type = as.character(c("atX", "atY")))
-        gettingMedical <- na.omit(gettingMedical)
-        data <- rbind(gettingMedical, waitingQueue)
-        data <- toJSON(data)
-        session$sendCustomMessage("update-waiting", data)
-        
         # A Phase
         clock <<- as.numeric(futureEventList[1, 1])
         currentlyPooled <- pooled
@@ -389,10 +397,20 @@ server <- function(input, output, session) {
         timeUntilNextEvent <<- futureEventList[1, 1] - clock
         print(paste0("Until next: ", timeUntilNextEvent))
         if (input$play) {
-            invalidateLater(timeUntilNextEvent * progressionRate)
+            timing <- timeUntilNextEvent * progressionRate
+            # print(paste0("Timing: ", progressionRate))
+            invalidateLater(timing)
         } else {
             print(patientStats)
         }
+        
+        # send state of system to JS
+        gettingMedical <-
+            data.frame(id = as.integer(c(doctorCare['X'], doctorCare['Y'])), type = as.character(c("atX", "atY")))
+        gettingMedical <- na.omit(gettingMedical)
+        data <- rbind(gettingMedical, waitingQueue)
+        data <- toJSON(data)
+        session$sendCustomMessage("update-waiting", data)
     })
     
     ########################
