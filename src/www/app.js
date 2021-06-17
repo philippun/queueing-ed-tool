@@ -3,6 +3,7 @@ import {
   setUpAnimation,
   renderInfrastructure,
   renderPatientPosition,
+  maxQueueLength
 } from "./animation.js";
 
 let pooled, numberPatientTypes;

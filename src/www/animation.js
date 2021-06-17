@@ -11,7 +11,7 @@ const patientDiameter = (8 / 11) * queueSpacing;
 const patientRadius = patientDiameter / 2; //16;
 const officeWidth = queueSpacing;
 const officeHeight = queueSpacing * 2;
-const maxQueueLength = 10;
+export const maxQueueLength = 10;
 
 // scales
 const colorScale = d3
@@ -47,10 +47,11 @@ export function renderInfrastructure(numberQueues, pooled) {
   // START doctor offices
   let selection = d3.select(".doctor-offices");
 
-  const offices = selection.selectAll("g").data(d3.range(numberQueues));
+  const offices = selection.selectAll("g.office").data(d3.range(numberQueues));
   const officesEnter = offices
     .enter()
     .append("g")
+    .attr("class", "office")
     .attr(
       "transform",
       (d, i) =>
@@ -75,6 +76,11 @@ export function renderInfrastructure(numberQueues, pooled) {
     .attr("height", officeHeight)
     .attr("fill", "none")
     .attr("stroke", "black");
+
+  officesEnter
+    .append("g")
+    .attr("transform", `translate(${6/44 * queueSpacing}, ${4/44 * queueSpacing}) scale(${1/44 * queueSpacing})`)
+    .append("image").attr("xlink:href", "doctor.svg");
 
   // START waiting lines
   selection = d3.select(".waiting-lines");
