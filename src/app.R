@@ -9,12 +9,11 @@ settings <- function() {
     tabPanel(
         "Settings",
         h3("Hospital"),
-        numericInput("patientTypes", 
-                     "Types of patients:", 
-                     value = 2, 
-                     min = 2, 
-                     max = 2, 
-                     step = 1),
+        numericInput("patientTypes",
+                     "Number of patient types:",
+                     value = 2,
+                     min = 1,
+                     max = 3),
         checkboxInput("pooled",
                       "Pool patients/queues",
                       value = FALSE),
@@ -68,7 +67,7 @@ app <- function() {
                         scenarios()),
             width = 3),
         mainPanel(
-            div(class="top", div(class="animation"), div(class="statusinfo", "test")),
+            div(class="top", div(class="animation"), div(class="statusinfo", "content needed")),
             div(class="bottom", div(class="graph")),
             width = 9
         ))
@@ -81,7 +80,9 @@ ui <- navbarPage(
     selected = "App",
     tabPanel("App", app()),
     tabPanel("About", includeMarkdown("about.md")),
-    tags$script(src = "app.js")
+    tags$script(type = "module", src = "app.js"),
+    tags$script(type = "module", src = "graph.js"),
+    tags$script(type = "module", src = "animation.js")
 )
 
 #############################
@@ -101,10 +102,10 @@ server <- function(input, output, session) {
     arrivalCount <- 0
     scheduledCount <- 0
     pooled <- isolate(input$pooled)
-    progressionRate <- mediumRate #mediumRate
+    progressionRate <- mediumRate
     
-    arrivalRate <- c(X = 9, Y = 9)
-    serviceRate <- c(X = 11, Y = 11)
+    arrivalRate <- c(X = isolate(input$arrivalRateX), Y = isolate(input$arrivalRateY))
+    serviceRate <- c(X = isolate(input$serviceRateX), Y = isolate(input$serviceRateY))
     
     # set up waiting queue and future event list (FEL)
     waitingQueue <- data.frame(id = integer(), type = character())

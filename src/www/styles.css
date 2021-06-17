@@ -2,6 +2,7 @@
     display: grid;
     grid-template-columns: 7fr 3fr;
     grid-gap: 1em;
+    padding-bottom: 1em;
 }
 
 .animation {
