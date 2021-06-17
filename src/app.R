@@ -102,6 +102,7 @@ server <- function(input, output, session) {
     arrivalCount <- 0
     scheduledCount <- 0
     pooled <- isolate(input$pooled)
+    numberPatientTypes <- isolate(input$patientTypes)
     progressionRate <- mediumRate
     
     arrivalRate <- c(X = isolate(input$arrivalRateX), Y = isolate(input$arrivalRateY))
