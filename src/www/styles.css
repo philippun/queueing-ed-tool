@@ -1,6 +1,6 @@
 .top {
     display: grid;
-    grid-template-columns: 7fr 3fr;
+    grid-template-columns: 7fr 7fr;
     grid-gap: 1em;
     padding-bottom: 1em;
 }

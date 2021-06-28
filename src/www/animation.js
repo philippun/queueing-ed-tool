@@ -16,7 +16,7 @@ export const maxQueueLength = 10;
 // scales
 const colorScale = d3
   .scaleOrdinal()
-  .domain(["X", "Y", "atX", "atY"])
+  .domain([1, 2, -1, -2])
   .range(["green", "steelblue"]);
 
 export function renderInfrastructure(numberQueues, pooled) {

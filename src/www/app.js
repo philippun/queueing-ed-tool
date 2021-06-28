@@ -11,7 +11,7 @@ let pooled, numberPatientTypes;
 setUpAnimation();
 setUpGraph();
 
-Shiny.addCustomMessageHandler("update-waiting", function (data) {
+Shiny.addCustomMessageHandler("update-animation", function (data) {
   pooled = document.getElementById("pooled").checked;
   numberPatientTypes = document.getElementById("patientTypes").value;
 
@@ -21,10 +21,10 @@ Shiny.addCustomMessageHandler("update-waiting", function (data) {
     // calculate positions in pooled state
     let position = 0;
     for (let i in data) {
-      if (data[i].type === "atX") {
+      if (data[i].type == -1) {
         data[i].pos = -3;
         data[i].queue = 1;
-      } else if (data[i].type === "atY") {
+    } else if (data[i].type == -2) {
         data[i].pos = -3;
         data[i].queue = 2;
       } else {
@@ -40,24 +40,25 @@ Shiny.addCustomMessageHandler("update-waiting", function (data) {
     let positionX = 0;
     let positionY = 0;
     for (let i in data) {
-      if (data[i].type === "X") {
+      if (data[i].type == 1) {
         data[i].pos = positionX;
         data[i].queue = 1;
         positionX++;
-      } else if (data[i].type === "Y") {
+    } else if (data[i].type == 2) {
         data[i].pos = positionY;
         data[i].queue = 2;
         positionY++;
-      } else if (data[i].type === "atX") {
+    } else if (data[i].type == -1) {
         data[i].pos = -3;
         data[i].queue = 1;
-      } else if (data[i].type === "atY") {
+    } else if (data[i].type == -2) {
         data[i].pos = -3;
         data[i].queue = 2;
       }
     }
   }
 
+  console.log(data);
   renderPatientPosition(data, numberPatientTypes, pooled);
 });
 

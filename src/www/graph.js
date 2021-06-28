@@ -1,7 +1,7 @@
 // constants for graph at bottom
 const graphHeight = 260;
 const graphWidth = 1000;
-const graphMargin = { top: 20, right: 20, bottom: 25, left: 30 };
+const graphMargin = { top: 20, right: 30, bottom: 25, left: 30 };
 const graphInnerWidth = graphWidth - graphMargin.left - graphMargin.right;
 const graphInnerHeight = graphHeight - graphMargin.top - graphMargin.bottom;
 
@@ -42,10 +42,16 @@ export function setUpGraph() {
     .attr("class", "graph-group")
     .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
 
-  svg
+  let g2 = svg
     .append("g")
     .attr("class", "waiting-group")
     .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
+
+  g.append("g").call(d3.axisLeft(yScale));
+
+  g.append("g")
+    .attr("transform", `translate(${graphInnerWidth}, 0)`)
+    .call(d3.axisRight(yScaleWaiting));
 
   svg
     .append("g")
