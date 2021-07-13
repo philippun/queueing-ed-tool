@@ -1,6 +1,6 @@
 // constants for graph at bottom
-const graphHeight = 260;
-const graphWidth = 1000;
+const graphHeight = 350;
+const graphWidth = 850;
 const graphMargin = { top: 20, right: 30, bottom: 25, left: 30 };
 const graphInnerWidth = graphWidth - graphMargin.left - graphMargin.right;
 const graphInnerHeight = graphHeight - graphMargin.top - graphMargin.bottom;
@@ -30,9 +30,8 @@ const yScaleWaiting = d3
   .domain([0, 1])
   .range([graphInnerHeight, 0]);
 
-export function setUpGraph() {
-  let svg = d3
-    .select(".graph")
+export function setUpGraph(selection) {
+  let svg = selection
     .append("svg")
     .attr("preserveAspectRatio", "xMinYMin meet")
     .attr("viewBox", `0 0 ${graphWidth} ${graphHeight}`);
@@ -55,18 +54,18 @@ export function setUpGraph() {
 
   svg
     .append("g")
-    .call(d3.axisBottom(xScaleBand))
+    .call(d3.axisBottom(xScaleBand).tickValues(xScaleBand.domain().filter(function(d,i){ return !(i%4)})))
     .attr(
       "transform",
       `translate(${graphMargin.left}, ${graphMargin.top + graphInnerHeight})`
     )
     .attr("class", "bottomAxis")
     .selectAll("text")
-    .attr("transform", `translate(${-xScaleBand.step()},15), rotate(-90)`);
+    .attr("transform", `translate(${-xScaleBand.step() - 5},15), rotate(-90)`);
 }
 
-export function renderGraph(data) {
-  let graph = d3.select(".graph-group");
+export function renderGraph(selection, data) {
+  let graph = selection.select(".graph-group");
 
   let avgPatientsInQueue = graph.selectAll("rect").data(data);
   avgPatientsInQueue
@@ -81,7 +80,7 @@ export function renderGraph(data) {
     .attr("height", (d) => yScale(0) - yScale(yValue(d)));
   avgPatientsInQueue.exit().remove();
 
-  let waitingGraph = d3.select(".waiting-group");
+  let waitingGraph = selection.select(".waiting-group");
 
   // avg waiting time x path
   let avgWaitingTimeXLineGenerator = d3

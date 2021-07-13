@@ -9,30 +9,19 @@ settings <- function() {
     tabPanel(
         "Settings",
         h3("Hospital"),
-        numericInput("patientTypes",
-                     "Number of patient types:",
-                     value = 2,
-                     min = 1,
-                     max = 3),
-        checkboxInput("pooled",
-                      "Pool patients/queues",
-                      value = FALSE),
-        checkboxInput("variability",
-                      "Use variable rates",
-                      value = FALSE),
         h4("Green Patients"),
         sliderInput(
             "arrivalRateX",
             "Arrival rate:",
             min = 1,
-            max = 20,
+            max = 50,
             value = 9
         ),
         sliderInput(
             "serviceRateX",
             "Service rate:",
             min = 1,
-            max = 20,
+            max = 60,
             value = 11
         ),
         h4("Blue Patients"),
@@ -40,14 +29,14 @@ settings <- function() {
             "arrivalRateY",
             "Arrival rate:",
             min = 1,
-            max = 20,
+            max = 50,
             value = 9
         ),
         sliderInput(
             "serviceRateY",
             "Service rate:",
             min = 1,
-            max = 20,
+            max = 60,
             value = 11
         )
     )
@@ -70,9 +59,23 @@ app <- function() {
                         scenarios()),
             width = 2),
         mainPanel(
-            div(class="top", div(class="animation"), div(class="statusinfo", "content needed")),
-            div(class="bottom", div(class="graph")),
-            width = 9
+            fluidRow(
+                column(6, 
+                       tags$h3("Unpooled"), 
+                       actionButton("showPerformanceUnpooled", "Show mean waiting times"), 
+                       verbatimTextOutput("performanceUnpooled", placeholder = T), 
+                       div(class="top", div(class="animation-unpooled")), 
+                       div(class="bottom", div(class="graph-unpooled"))),
+                column(6, 
+                       tags$h3("Pooled"), 
+                       actionButton("showPerformancePooled", "Show mean waiting times"), 
+                       verbatimTextOutput("performancePooled", placeholder = T), 
+                       div(class="top", div(class="animation-pooled")), 
+                       div(class="bottom", div(class="graph-pooled")))
+            ),
+            #div(class="top", div(class="animation"), div(class="statusinfo", "content needed")),
+            #div(class="bottom", div(class="graph")),
+            width = 10
         ))
 }
 
@@ -96,41 +99,45 @@ server <- function(input, output, session) {
     # constants
     queueMax <- 10
     arrivalMax <- 10000
-    fastRate <- 10000
-    mediumRate <- 30000
-    slowRate <- 50000
+    fastRate <- 50000
+    mediumRate <- 80000
+    slowRate <- 110000
     
     # initial variables
     clock <- as.double(0)
-    arrivalCount <- 0
+    arrivalCountUnpooled <- 0
+    arrivalCountPooled <- 0
     scheduledCount <- 0
-    pooled <- isolate(input$pooled)
-    variability <- isolate(input$variability)
-    numberPatientTypes <- isolate(input$patientTypes)
     progressionRate <- mediumRate
     
-    arrivalRate <- c(X = isolate(input$arrivalRateX), Y = isolate(input$arrivalRateY)) # extend by Z
-    serviceRate <- c(X = isolate(input$serviceRateX), Y = isolate(input$serviceRateY)) # extend by Z
+    arrivalRate <- c(X = isolate(input$arrivalRateX), Y = isolate(input$arrivalRateY))
+    serviceRate <- c(X = isolate(input$serviceRateX), Y = isolate(input$serviceRateY))
     
-    # set up waiting queue and future event list (FEL)
-    waitingQueue <- data.frame(id = integer(), type = integer()) # was character before
+    # set up waiting queues and future event list (FEL)
+    waitingQueueUnpooled <- data.frame(id = integer(), type = integer())
+    waitingQueuePooled <- data.frame(id = integer(), type = integer())
     futureEventList <-
         data.frame(time = double(),
                    event = character(),
-                   type = integer()) # was character before
+                   type = integer(),
+                   pooled = logical())
     
-    # set up idle doctors
-    doctorCare <- c(X = NA, Y = NA) # extend by Z
+    # vector for saving which patient is currently at doctor; set up idle doctors
+    doctorCareUnpooled <- c(X = NA, Y = NA)
+    doctorCarePooled <- c(X = NA, Y = NA)
     
-    # statistics stuff
-    statistics <- 
+    
+    ## dataframes for holding statistics ##
+    # df for holding the overall statistics about unpooled queueing system
+    statisticsUnpooled <- 
         data.frame(
             avgWaitingTimeX = double(),
             avgWaitingTimeY = double(),
             avgPatientsInQueue = double()
         )
     
-    patientStats <-
+    # df for holding statistics for individual patients in unpooled queueing system
+    patientStatsUnpooled <-
         data.frame(
             id = integer(),
             type = integer(),
@@ -139,30 +146,75 @@ server <- function(input, output, session) {
             endMedical = double()
         )
     
-    systemStats <-
+    # df for holding statistics on patients waiting at specific time in unpooled queueing system
+    systemStatsUnpooled <-
         data.frame(
             time = double(),
             queuedPatientsX = integer(),
             queuedPatientsY = integer()
         )
     
-    logPatient <- function(id, type) {
+    # df for holding the overall statistics about pooled queueing system
+    statisticsPooled <- 
+        data.frame(
+            avgWaitingTimeX = double(),
+            avgWaitingTimeY = double(),
+            avgPatientsInQueue = double()
+        )
+    
+    # df for holding statistics for individual patients in pooled queueing system
+    patientStatsPooled <-
+        data.frame(
+            id = integer(),
+            type = integer(),
+            arrivalTime = double(),
+            startMedical = double(),
+            endMedical = double()
+        )
+    
+    # df for holding statistics on patients waiting at specific time in pooled queueing system
+    systemStatsPooled <-
+        data.frame(
+            time = double(),
+            queuedPatientsX = integer(),
+            queuedPatientsY = integer()
+        )
+    
+    
+    ## functions for calculating statistics ##
+    # adds a new patient to the patient statistics
+    logPatient <- function(id, type, pooled) {
         patient <- data.frame(
             id = as.integer(id),
             type = type,
             arrivalTime = as.double(NA),
             startMedical = as.double(NA),
             endMedical = as.double(NA))
-        patientStats <<- rbind(patientStats, patient)
-        patientStats <<- tail(patientStats, 80) # privacy regulations
+        if (pooled) {
+            patientStatsPooled <<- rbind(patientStatsPooled, patient)
+            patientStatsPooled <<- tail(patientStatsPooled, 80) # privacy regulations
+        } else {
+            patientStatsUnpooled <<- rbind(patientStatsUnpooled, patient)
+            patientStatsUnpooled <<- tail(patientStatsUnpooled, 80) # privacy regulations
+        }
     }
     
-    logPatientTime <- function(id, col, time) {
-        patientStats[patientStats$id == id, col] <<- time
+    logPatientTime <- function(id, col, time, pooled) {
+        if (pooled) {
+            patientStatsPooled[patientStatsPooled$id == id, col] <<- time
+        } else {
+            patientStatsUnpooled[patientStatsUnpooled$id == id, col] <<- time
+        }
+        
     }
     
-    calcAvgWaitingTime <- function(patientType = "") { 
-        relevantData <- na.omit(patientStats)
+    calcAvgWaitingTime <- function(patientType = "", pooled) { 
+        if (pooled) {
+            relevantData <- na.omit(patientStatsPooled)
+        } else {
+            relevantData <- na.omit(patientStatsUnpooled)
+        }
+        
         relevantData <- tail(relevantData, 20) # last 20 completed patients
         if (patientType != "") {
             relevantData <- subset(relevantData, type == patientType)
@@ -176,40 +228,61 @@ server <- function(input, output, session) {
         
     }
     
-    calcQueueLength <- function(patientType) {
-        nrow(subset(waitingQueue, type == patientType))
-        
-        # if (pooled) {
-        #     nrow(waitingQueue)
-        # } else {
-        #     nrow(subset(waitingQueue, type == patientType))
-        # }
+    calcQueueLength <- function(patientType, pooled) {
+        if (pooled) {
+            nrow(waitingQueuePooled)
+        } else {
+            nrow(subset(waitingQueueUnpooled, type == patientType))
+        }
     }
     
-    logSystem <- function() {
-        currentSystem <- data.frame(
-            time = clock,
-            queuedPatientsX = calcQueueLength(1),
-            queuedPatientsY = calcQueueLength(2)
-        )
-        systemStats <<- rbind(systemStats, currentSystem)
-        systemStats <<- tail(systemStats, 80)
+    logSystem <- function(pooled) {
+        if (pooled) {
+            currentSystemPooled <- data.frame(
+                time = clock,
+                queuedPatientsX = calcQueueLength(1, F),
+                queuedPatientsY = calcQueueLength(2, F)
+            )
+            systemStatsPooled <<- rbind(systemStatsPooled, currentSystemPooled)
+            systemStatsPooled <<- tail(systemStatsPooled, 80)
+        } else {
+            currentSystemUnpooled <- data.frame(
+                time = clock,
+                queuedPatientsX = calcQueueLength(1, F),
+                queuedPatientsY = calcQueueLength(2, F)
+            )
+            systemStatsUnpooled <<- rbind(systemStatsUnpooled, currentSystemUnpooled)
+            systemStatsUnpooled <<- tail(systemStatsUnpooled, 80)
+        }
     }
     
-    calcAvgPatientsInQueue <- function() {
-        queuedPatients <- systemStats$queuedPatientsX + systemStats$queuedPatientsY
-        queuedPatients <- tail(queuedPatients, 20)
-        mean(queuedPatients)
+    calcAvgPatientsInQueue <- function(pooled) {
+        if (pooled) {
+            queuedPatients <- systemStatsPooled$queuedPatientsX + systemStatsPooled$queuedPatientsY
+            queuedPatients <- tail(queuedPatients, 20)
+            mean(queuedPatients)
+        } else {
+            queuedPatients <- systemStatsUnpooled$queuedPatientsX + systemStatsUnpooled$queuedPatientsY
+            queuedPatients <- tail(queuedPatients, 20)
+            mean(queuedPatients)
+        }
     }
     
-    extendStatistics <- function() {
+    extendStatistics <- function(pooled) {
         newRow <- data.frame(
-            avgWaitingTimeX = calcAvgWaitingTime(1),
-            avgWaitingTimeY = calcAvgWaitingTime(2),
-            avgPatientsInQueue = calcAvgPatientsInQueue()
+            avgWaitingTimeX = calcAvgWaitingTime(1, pooled),
+            avgWaitingTimeY = calcAvgWaitingTime(2, pooled),
+            avgPatientsInQueue = calcAvgPatientsInQueue(pooled)
         )
-        statistics <<- rbind(statistics, newRow)
-        statistics <<- tail(statistics, 80)
+        
+        if (pooled) {
+            statisticsPooled <<- rbind(statisticsPooled, newRow)
+            statisticsPooled <<- tail(statisticsPooled, 80)
+        } else {
+            statisticsUnpooled <<- rbind(statisticsUnpooled, newRow)
+            statisticsUnpooled <<- tail(statisticsUnpooled, 80)
+        }
+        
     }
     
     
@@ -217,52 +290,40 @@ server <- function(input, output, session) {
     ## START FUNCTIONS FOR SIMULATION ##
     ####################################
     
-    # generate random number from exp dist and truncate
-    genInterTime <- function(event, type) {
-        if (variability) {
-            
-            if (event == "arrival") {
-                rate <-
-                    arrivalRate[type] # can be seen as avg patients arriving per hour
-                min <- 0
-            } else if (event == "departure") {
-                rate <- serviceRate[type]
-                min <- 0 # 0.1
-            } else {
-                print("ERROR: event was neither arrival nor departure.")
-            }
-            
-            trunc <- 4
-            num <- rexp(1, rate = rate)
-            if (num > (trunc * 1 / rate)) {
-                (trunc * 1 / rate) + min
-            } else {
-                num + min
-            }
-            
+    # generate random number from exp dist and truncated at 4 times mean
+    genInterArrivalTime <- function(type) {
+        rate <- arrivalRate[type]
+        
+        trunc <- 4
+        num <- rexp(1, rate = rate)
+        if (num > (trunc * 1 / rate)) {
+            (trunc * 1 / rate)
         } else {
-            
-            if (event == "arrival") {
-                rate <-
-                    arrivalRate[type] # can be seen as avg patients arriving per hour
-            } else if (event == "departure") {
-                rate <- serviceRate[type]
-            } else {
-                print("ERROR: event was neither arrival nor departure.")
-            }
-            
-            1 / rate
-            
+            num
         }
     }
     
     # add a new event to the Future Event List
-    addEvent <- function(event, type) {
+    addArrivalEvent <- function(type) {
         newEvent <-
             data.frame(
-                time = as.double(clock + genInterTime(event, type)),
-                event = c(event),
-                type = c(type)
+                time = as.double(clock + genInterArrivalTime(type)),
+                event = c("arrival"),
+                type = c(type),
+                pooled = NA
+            )
+        futureEventList <<- rbind(futureEventList, newEvent)
+        futureEventList <<-
+            futureEventList[order(futureEventList$time),]
+    }
+    
+    addDepartureEvent <- function(type, pool) {
+        newEvent <-
+            data.frame(
+                time = as.double(clock + 1 / serviceRate[type]),
+                event = c("departure"),
+                type = c(type),
+                pooled = c(pool)
             )
         futureEventList <<- rbind(futureEventList, newEvent)
         futureEventList <<-
@@ -270,30 +331,39 @@ server <- function(input, output, session) {
     }
     
     # enqueues a new patient arrival
-    enqueue <- function(type) {
-        newPatient <- c(arrivalCount, type)
-        newPatient <-
-            data.frame(matrix(newPatient, ncol = 2, nrow = 1))
-        colnames(newPatient) <- c('id', 'type')
-        waitingQueue <<- rbind(waitingQueue, newPatient)
+    enqueue <- function(type, pooled) {
+        if (!pooled) {
+            newPatient <- c(arrivalCountUnpooled, type)
+            newPatient <-
+                data.frame(matrix(newPatient, ncol = 2, nrow = 1))
+            colnames(newPatient) <- c('id', 'type')
+            waitingQueueUnpooled <<- rbind(waitingQueueUnpooled, newPatient)
+        } else {
+            newPatient <- c(arrivalCountPooled, type)
+            newPatient <-
+                data.frame(matrix(newPatient, ncol = 2, nrow = 1))
+            colnames(newPatient) <- c('id', 'type')
+            waitingQueuePooled <<- rbind(waitingQueuePooled, newPatient)
+        }
     }
     
     # dequeues a patient
     # considers if queues are currently pooled or not
     dequeue <- function(type, currentlyPooled) {
         if (currentlyPooled) {
-            patientId <- waitingQueue[1, 1]
-            doctorCare[type] <<- patientId
-            waitingQueue <<- waitingQueue[-c(1), ]
-            logPatientTime(patientId, "startMedical", clock)
+            patientId <- waitingQueuePooled[1, 1]
+            doctorCarePooled[type] <<- patientId
+            waitingQueuePooled <<- waitingQueuePooled[-c(1), ] #changed into Pooled
+            logPatientTime(patientId, "startMedical", clock, T)
         } else {
-            for (i in 1:nrow(waitingQueue)) {
-                if (waitingQueue[i, "type"] == type) {
+            for (i in 1:nrow(waitingQueueUnpooled)) {
+                print("test")
+                if (waitingQueueUnpooled[i, "type"] == type) {
                     # print(paste0("Took in patient of type ", waitingQueue[i,2]))
-                    patientId <- waitingQueue[i, 1]
-                    doctorCare[type] <<- patientId
-                    waitingQueue <<- waitingQueue[-c(i), ]
-                    logPatientTime(patientId, "startMedical", clock)
+                    patientId <- waitingQueueUnpooled[i, 1]
+                    doctorCareUnpooled[type] <<- patientId
+                    waitingQueueUnpooled <<- waitingQueueUnpooled[-c(i), ]
+                    logPatientTime(patientId, "startMedical", clock, F)
                     break
                 }
             }
@@ -304,9 +374,9 @@ server <- function(input, output, session) {
     # considers if queues are currently pooled or not
     isPatientWaiting <- function(type, currentlyPooled) {
         if (currentlyPooled) {
-            nrow(waitingQueue) > 0
+            nrow(waitingQueuePooled) > 0
         } else {
-            any(waitingQueue$type == type)
+            any(waitingQueueUnpooled$type == type)
         }
     }
     
@@ -319,39 +389,64 @@ server <- function(input, output, session) {
     # }
     
     # patient arrival
-    modelArrival <- function(type, currentlyPooled) {
-        if (currentlyPooled) {
-            if (nrow(waitingQueue) < 2 * queueMax) {
-                arrivalCount <<- arrivalCount + 1
-                enqueue(type)
-                logPatient(arrivalCount, type)
-                logPatientTime(arrivalCount, "arrivalTime", clock)
-            }
-        } else {
-            if (calcQueueLength(type) < queueMax) {
-                arrivalCount <<- arrivalCount + 1
-                enqueue(type)
-                logPatient(arrivalCount, type)
-                logPatientTime(arrivalCount, "arrivalTime", clock)
-            }
+    modelArrival <- function(type) {
+        # if (currentlyPooled) {
+        #     if (nrow(waitingQueue) < 2 * queueMax) {
+        #         arrivalCount <<- arrivalCount + 1
+        #         enqueue(type)
+        #         logPatient(arrivalCount, type)
+        #         logPatientTime(arrivalCount, "arrivalTime", clock)
+        #     }
+        # } else {
+        #     if (calcQueueLength(type) < queueMax) {
+        #         arrivalCount <<- arrivalCount + 1
+        #         enqueue(type)
+        #         logPatient(arrivalCount, type)
+        #         logPatientTime(arrivalCount, "arrivalTime", clock)
+        #     }
+        # }
+        
+        if (calcQueueLength(type, F) < queueMax) {
+            arrivalCountUnpooled <<- arrivalCountUnpooled + 1
+            enqueue(type, F)
+            logPatient(arrivalCountUnpooled, type, F)
+            logPatientTime(arrivalCountUnpooled, "arrivalTime", clock, F)
+        }
+        
+        if (calcQueueLength(type, T) < 2 * queueMax) {
+            arrivalCountPooled <<- arrivalCountPooled + 1
+            enqueue(type, T)
+            logPatient(arrivalCountPooled, type, T)
+            logPatientTime(arrivalCountPooled, "arrivalTime", clock, T)
         }
         
         if (scheduledCount < arrivalMax) {
-            addEvent("arrival", type) # schedule next arrival
+            addArrivalEvent(type) # schedule next arrival
             scheduledCount <<- scheduledCount + 1
         }
     }
     
     # patient departure
-    modelDeparture <- function(type) {
-        logPatientTime(doctorCare[type], "endMedical", clock)
-        logSystem()
-        extendStatistics()
+    modelDepartureUnpooled <- function(type) {
+        logPatientTime(doctorCareUnpooled[type], "endMedical", clock, F)
+        logSystem(F)
+        extendStatistics(F)
         
-        data <- toJSON(statistics)
-        session$sendCustomMessage("update-graph", data)
+        data <- toJSON(statisticsUnpooled)
+        session$sendCustomMessage("update-graph-unpooled", data)
         
-        doctorCare[type] <<- NA
+        doctorCareUnpooled[type] <<- NA
+    }
+    
+    modelDeparturePooled <- function(type) {
+        logPatientTime(doctorCarePooled[type], "endMedical", clock, T)
+        logSystem(T)
+        extendStatistics(T)
+
+        data <- toJSON(statisticsPooled)
+        session$sendCustomMessage("update-graph-pooled", data)
+        
+        doctorCarePooled[type] <<- NA
     }
     
     ##################################
@@ -365,8 +460,8 @@ server <- function(input, output, session) {
     ##########################
     
     # simulation initialization
-    addEvent("arrival", 1) # 2nd argument was "X" before
-    addEvent("arrival", 2) # "Y"
+    addArrivalEvent(1) # 2nd argument was "X" before
+    addArrivalEvent(2) # "Y"
     scheduledCount <- 2
     
     # simulation main loop
@@ -375,34 +470,47 @@ server <- function(input, output, session) {
         
         # A Phase
         clock <<- as.numeric(futureEventList[1, 1])
-        currentlyPooled <- pooled
+        #currentlyPooled <- pooled
         
         while (futureEventList[1, 1] == clock) { # some bug here where the FEL can be empty?
             event <- futureEventList[1,]
-            futureEventList <<- futureEventList[-c(1), ]
+            futureEventList <<- futureEventList[-c(1), ] # remove current event from FEL
             print(paste0("Time: ", clock))
             
             # B Phase
             if (event[1, ]$event == "arrival") {
-                modelArrival(event[1, ]$type, currentlyPooled)
-            } else if (event[1, ]$event == "departure") {
-                modelDeparture(event[1, ]$type)
+                modelArrival(event[1, ]$type)
+            } else if (event[1, ]$event == "departure" && event[1, ]$pooled == F) {
+                modelDepartureUnpooled(event[1, ]$type)
+            } else if (event[1, ]$event == "departure" && event[1, ]$pooled) {
+                modelDeparturePooled(event[1, ]$type)
             } else {
                 print("ERROR: undefined event.")
+                quit("no")
             }
         }
         
         
         # C Phase
-        if (is.na(doctorCare['X']) &&
-            isPatientWaiting(1, currentlyPooled)) {
-            dequeue(1, currentlyPooled) # "X" before
-            addEvent("departure", 1) # schedule next departure
+        if (is.na(doctorCareUnpooled['X']) &&
+            isPatientWaiting(1, F)) {
+            dequeue(1, F) # "X" before
+            addDepartureEvent(1, F) # schedule next departure unpooled
         }
-        if (is.na(doctorCare['Y']) &&
-            isPatientWaiting(2, currentlyPooled)) {
-            dequeue(2, currentlyPooled) # "Y" before
-            addEvent("departure", 2) # schedule next departure
+        if (is.na(doctorCareUnpooled['Y']) &&
+            isPatientWaiting(2, F)) {
+            dequeue(2, F) # "Y" before
+            addDepartureEvent(2, F) # schedule next departure unpooled
+        }
+        if (is.na(doctorCarePooled['X']) &&
+            isPatientWaiting(1, T)) {
+            dequeue(1, T) # "X" before
+            addDepartureEvent(1, T) # schedule next departure pooled
+        }
+        if (is.na(doctorCarePooled['Y']) &&
+            isPatientWaiting(2, T)) {
+            dequeue(2, T) # "Y" before
+            addDepartureEvent(2, T) # schedule next departure pooled
         }
         
         
@@ -413,16 +521,23 @@ server <- function(input, output, session) {
             # print(paste0("Timing: ", progressionRate))
             invalidateLater(timing)
         } else {
-            print(patientStats)
+            #print(patientStats)
         }
         
         # send state of system to JS
         gettingMedical <-
-            data.frame(id = as.integer(c(doctorCare['X'], doctorCare['Y'])), type = as.integer(c(-1, -2)))
+            data.frame(id = as.integer(c(doctorCareUnpooled['X'], doctorCareUnpooled['Y'])), type = as.integer(c(-1, -2)))
         gettingMedical <- na.omit(gettingMedical)
-        data <- rbind(gettingMedical, waitingQueue)
+        data <- rbind(gettingMedical, waitingQueueUnpooled)
         data <- toJSON(data)
-        session$sendCustomMessage("update-animation", data)
+        session$sendCustomMessage("update-animation-unpooled", data)
+        
+        gettingMedical <-
+            data.frame(id = as.integer(c(doctorCarePooled['X'], doctorCarePooled['Y'])), type = as.integer(c(-1, -2)))
+        gettingMedical <- na.omit(gettingMedical)
+        data <- rbind(gettingMedical, waitingQueuePooled)
+        data <- toJSON(data)
+        session$sendCustomMessage("update-animation-pooled", data)
     })
     
     ########################
@@ -437,6 +552,43 @@ server <- function(input, output, session) {
         serviceRate['Y'] <<- input$serviceRateY
         pooled <<- input$pooled
         variability <<- input$variability
+        
+        output$performancePooled <- renderText("")
+        output$performanceUnpooled <- renderText("")
+    })
+    
+    probi <- function(type) {
+        arrivalRate[type] / (arrivalRate['X'] + arrivalRate['Y'])
+    }
+    
+    observeEvent(input$showPerformanceUnpooled, {
+        rho1 <- arrivalRate['X'] / serviceRate['X']
+        rho2 <- arrivalRate['Y'] / serviceRate['Y']
+        
+        EWq1 <- 0.5 * (rho1)^2 / (1 - rho1) / arrivalRate['X'] * 60
+        EWq2 <- 0.5 * (rho2)^2 / (1 - rho2) / arrivalRate['Y'] * 60
+        
+        EWqA <- probi('X') * EWq1 + probi('Y') * EWq2
+        
+        out <- renderText(paste0("Mean waiting time::: green patient: ", round(EWq1, 2), ", blue patient: ", round(EWq2, 2), ", average patient: ", round(EWqA, 2)))
+        output$performanceUnpooled <- out
+    })
+    
+    observeEvent(input$showPerformancePooled, {
+        k_a <- arrivalRate['X'] / arrivalRate['Y']
+        k_s <- serviceRate['X'] / serviceRate['Y']
+        
+        rho1 <- arrivalRate['X'] / serviceRate['X']
+        rho2 <- arrivalRate['Y'] / serviceRate['Y']
+        
+        rho_ <- (k_a + k_s) / (2 * k_a) * rho1
+        tau_ <- (k_a + k_s) / (k_a + 1) * (1 / serviceRate['X'])
+        c2_mix <- (k_a * (k_s - 1)^2) / (k_a + k_s)^2
+        
+        EWqP <- 0.5 * (1 + c2_mix) * (tau_ * rho_^2) / (1 - rho_^2) * 60
+        
+        out <- renderText(paste0("Mean waiting time average patient: ", round(EWqP, 2)))
+        output$performancePooled <- out
     })
 }
 

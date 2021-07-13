@@ -1,5 +1,5 @@
 // constants for animation at top
-const animationHeight = 400; //320;
+const animationHeight = 350; //320;
 const animationWidth = 850;
 const animationMargin = { top: 20, right: 20, bottom: 25, left: 30 };
 const animationInnerHeight =
@@ -19,7 +19,7 @@ const colorScale = d3
   .domain([1, 2, -1, -2])
   .range(["green", "steelblue"]);
 
-export function renderInfrastructure(numberQueues, pooled) {
+export function renderInfrastructure(selection, numberQueues, pooled) {
   const xPosition = (d, i) => {
     if (pooled) {
       return ((numberQueues - 1 - i) * queueSpacing) / numberQueues;
@@ -45,9 +45,9 @@ export function renderInfrastructure(numberQueues, pooled) {
   };
 
   // START doctor offices
-  let selection = d3.select(".doctor-offices");
+  let gSelection = selection.select(".doctor-offices");
 
-  const offices = selection.selectAll("g.office").data(d3.range(numberQueues));
+  const offices = gSelection.selectAll("g.office").data(d3.range(numberQueues));
   const officesEnter = offices
     .enter()
     .append("g")
@@ -83,9 +83,9 @@ export function renderInfrastructure(numberQueues, pooled) {
     .append("image").attr("xlink:href", "doctor.svg");
 
   // START waiting lines
-  selection = d3.select(".waiting-lines");
+  gSelection = selection.select(".waiting-lines");
 
-  const queues = selection.selectAll("g").data(d3.range(numberQueues));
+  const queues = gSelection.selectAll("g").data(d3.range(numberQueues));
   const queuesEnter = queues
     .enter()
     .append("g")
@@ -118,10 +118,9 @@ export function renderInfrastructure(numberQueues, pooled) {
     .attr("y2", -10);
 }
 
-export function setUpAnimation() {
+export function setUpAnimation(selection) {
   //append svg to designated element
-  let svg = d3
-    .select(".animation") //.animation div created in Shiny
+  let svg = selection //.animation div created in Shiny
     .append("svg")
     .attr("class", "animation-svg")
     .attr("preserveAspectRatio", "xMinYMin meet")
@@ -227,8 +226,8 @@ function renderPatientEmoji(selection) {
     .attr("y", 60);
 }
 
-export function renderPatientPosition(patients, numberPatientTypes, pooled) {
-  let svg = d3.select(".patients");
+export function renderPatientPosition(selection, patients, numberPatientTypes, pooled) {
+  let svg = selection.select(".patients");
 
   const xPosition = (d, i) => {
     let position =

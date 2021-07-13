@@ -1,11 +1,11 @@
 .top {
-    display: grid;
-    grid-template-columns: 7fr 7fr;
-    grid-gap: 1em;
+    /*display: grid;
+    (grid-template-columns: 7fr 7fr;
+    grid-gap: 1em;*/
     padding-bottom: 1em;
 }
 
-.animation {
+.animation-unpooled, .animation-pooled  {
     background: #E6E6E3;
 }
 
@@ -17,6 +17,6 @@
     width: 100%;
 }
 
-.graph {
+.graph-unpooled, .graph-pooled {
     background: #ddd;
 }
