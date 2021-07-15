@@ -1,15 +1,15 @@
 // constants for graph at bottom
 const graphHeight = 350;
 const graphWidth = 850;
-const graphMargin = { top: 20, right: 30, bottom: 25, left: 30 };
+const graphMargin = { top: 40, right: 70, bottom: 25, left: 50 };
 const graphInnerWidth = graphWidth - graphMargin.left - graphMargin.right;
 const graphInnerHeight = graphHeight - graphMargin.top - graphMargin.bottom;
 
 // x and y values for graph
 const xValue = (d, i) => i;
 const yValue = (d) => d.avgPatientsInQueue;
-const yValueWaitingX = (d) => d.avgWaitingTimeX;
-const yValueWaitingY = (d) => d.avgWaitingTimeY;
+const yValueWaitingX = (d) => d.avgWaitingTimeX * 60;
+const yValueWaitingY = (d) => d.avgWaitingTimeY * 60;
 
 const xScaleBand = d3
   .scaleBand()
@@ -27,7 +27,7 @@ const yScale = d3.scaleLinear().domain([0, 22]).range([graphInnerHeight, 0]);
 
 const yScaleWaiting = d3
   .scaleLinear()
-  .domain([0, 1])
+  .domain([0, 20])
   .range([graphInnerHeight, 0]);
 
 export function setUpGraph(selection) {
@@ -41,16 +41,39 @@ export function setUpGraph(selection) {
     .attr("class", "graph-group")
     .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
 
+    g.append('text')
+          .attr('class', 'title')
+          .attr('y', -20)
+          .text("Graph");
+
   let g2 = svg
     .append("g")
     .attr("class", "waiting-group")
     .attr("transform", `translate(${graphMargin.left},${graphMargin.top})`);
 
-  g.append("g").call(d3.axisLeft(yScale));
+  const leftAxisG = g.append("g").call(d3.axisLeft(yScale));
 
-  g.append("g")
+  leftAxisG.append("text")
+      .attr("class", "axis-label")
+      .attr('y', -30)
+      .attr('x', -graphInnerHeight / 2)
+      .attr('fill', 'black')
+      .attr('transform', `rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .text("Number patients");
+
+  const rightAxisG = g.append("g")
     .attr("transform", `translate(${graphInnerWidth}, 0)`)
     .call(d3.axisRight(yScaleWaiting));
+
+  rightAxisG.append("text")
+      .attr("class", "axis-label")
+      .attr('y', 50)
+      .attr('x', -graphInnerHeight / 2)
+      .attr('fill', 'black')
+      .attr('transform', `rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .text("Waiting time (in min.)");
 
   svg
     .append("g")
@@ -61,7 +84,7 @@ export function setUpGraph(selection) {
     )
     .attr("class", "bottomAxis")
     .selectAll("text")
-    .attr("transform", `translate(${-xScaleBand.step() - 5},15), rotate(-90)`);
+    /*.attr("transform", `translate(${-xScaleBand.step() - 5},15), rotate(-90)`)*/;
 }
 
 export function renderGraph(selection, data) {

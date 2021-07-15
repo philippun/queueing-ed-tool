@@ -20,3 +20,7 @@
 .graph-unpooled, .graph-pooled {
     background: #ddd;
 }
+
+.axis-label {
+    font-size: 2em;
+}

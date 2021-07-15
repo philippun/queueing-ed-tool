@@ -38,6 +38,14 @@ settings <- function() {
             min = 1,
             max = 60,
             value = 11
+        ),
+        h4("Additional settings"),
+        sliderInput(
+            "lastPatients",
+            "Number patients for statistical calculations:",
+            min = 3,
+            max = 30,
+            value = 20
         )
     )
 }
@@ -112,6 +120,7 @@ server <- function(input, output, session) {
     
     arrivalRate <- c(X = isolate(input$arrivalRateX), Y = isolate(input$arrivalRateY))
     serviceRate <- c(X = isolate(input$serviceRateX), Y = isolate(input$serviceRateY))
+    lastPatients <- isolate(input$lastPatients)
     
     # set up waiting queues and future event list (FEL)
     waitingQueueUnpooled <- data.frame(id = integer(), type = integer())
@@ -215,7 +224,7 @@ server <- function(input, output, session) {
             relevantData <- na.omit(patientStatsUnpooled)
         }
         
-        relevantData <- tail(relevantData, 20) # last 20 completed patients
+        relevantData <- tail(relevantData, lastPatients) # last 20 completed patients
         if (patientType != "") {
             relevantData <- subset(relevantData, type == patientType)
         }
@@ -259,11 +268,11 @@ server <- function(input, output, session) {
     calcAvgPatientsInQueue <- function(pooled) {
         if (pooled) {
             queuedPatients <- systemStatsPooled$queuedPatientsX + systemStatsPooled$queuedPatientsY
-            queuedPatients <- tail(queuedPatients, 20)
+            queuedPatients <- tail(queuedPatients, lastPatients)
             mean(queuedPatients)
         } else {
             queuedPatients <- systemStatsUnpooled$queuedPatientsX + systemStatsUnpooled$queuedPatientsY
-            queuedPatients <- tail(queuedPatients, 20)
+            queuedPatients <- tail(queuedPatients, lastPatients)
             mean(queuedPatients)
         }
     }
@@ -552,6 +561,7 @@ server <- function(input, output, session) {
         serviceRate['Y'] <<- input$serviceRateY
         pooled <<- input$pooled
         variability <<- input$variability
+        lastPatients <<- input$lastPatients
         
         output$performancePooled <- renderText("")
         output$performanceUnpooled <- renderText("")
@@ -567,6 +577,13 @@ server <- function(input, output, session) {
         
         EWq1 <- 0.5 * (rho1)^2 / (1 - rho1) / arrivalRate['X'] * 60
         EWq2 <- 0.5 * (rho2)^2 / (1 - rho2) / arrivalRate['Y'] * 60
+        
+        if (EWq1 < 0) {
+            EWq1 <- Inf
+        }
+        if (EWq2 < 0) {
+            EWq2 <- Inf
+        }
         
         EWqA <- probi('X') * EWq1 + probi('Y') * EWq2
         
@@ -586,6 +603,10 @@ server <- function(input, output, session) {
         c2_mix <- (k_a * (k_s - 1)^2) / (k_a + k_s)^2
         
         EWqP <- 0.5 * (1 + c2_mix) * (tau_ * rho_^2) / (1 - rho_^2) * 60
+        
+        if (EWqP < 0) {
+            EWqP <- Inf
+        }
         
         out <- renderText(paste0("Mean waiting time average patient: ", round(EWqP, 2)))
         output$performancePooled <- out

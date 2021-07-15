@@ -82,4 +82,5 @@ Shiny.addCustomMessageHandler("update-graph-unpooled", function (data) {
 
 Shiny.addCustomMessageHandler("update-graph-pooled", function (data) {
   renderGraph(graphPooled, data);
+  console.log(data);
 });
