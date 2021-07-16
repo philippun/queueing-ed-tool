@@ -24,3 +24,7 @@
 .axis-label {
     font-size: 2em;
 }
+
+pre {
+    margin: 10px 0 10px;
+}

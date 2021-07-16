@@ -39,14 +39,26 @@ settings <- function() {
             max = 60,
             value = 11
         ),
-        h4("Additional settings"),
-        sliderInput(
-            "lastPatients",
-            "Number patients for statistical calculations:",
-            min = 3,
-            max = 30,
-            value = 20
+        a(id = "toggleAdditionalSettings", "Additional settings", href = "#"),
+        shinyjs::hidden(
+            div(id = "additionalSettings",
+                sliderInput(
+                    "lastPatients",
+                    "Number patients for statistical calculations:",
+                    min = 3,
+                    max = 30,
+                    value = 20
+                )
+            )
         )
+        # h4("Additional settings"),
+        # sliderInput(
+        #     "lastPatients",
+        #     "Number patients for statistical calculations:",
+        #     min = 3,
+        #     max = 30,
+        #     value = 20
+        # )
     )
 }
 
@@ -91,6 +103,7 @@ ui <- navbarPage(
     "Queueing Education Tool",
     tags$head(tags$script(src = "https://d3js.org/d3.v5.min.js"),
               tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")),
+    shinyjs::useShinyjs(),
     selected = "App",
     tabPanel("App", app()),
     tabPanel("About", includeMarkdown("about.md")),
@@ -611,6 +624,9 @@ server <- function(input, output, session) {
         out <- renderText(paste0("Mean waiting time average patient: ", round(EWqP, 2)))
         output$performancePooled <- out
     })
+    
+    shinyjs::onclick("toggleAdditionalSettings",
+                     shinyjs::toggle(id = "additionalSettings", anim = TRUE))
 }
 
 ##################
