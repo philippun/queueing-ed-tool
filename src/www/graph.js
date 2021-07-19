@@ -43,8 +43,10 @@ export function setUpGraph(selection) {
 
     g.append('text')
           .attr('class', 'title')
-          .attr('y', -20)
-          .text("Graph");
+          .attr('x', graphInnerWidth / 2)
+          .attr('y', -15)
+          .attr('text-anchor', 'middle')
+          .text("Grey bars: Avg # in queue; Green: Avg wait time green; Blue: Avg wait time blue");
 
   let g2 = svg
     .append("g")
@@ -73,7 +75,7 @@ export function setUpGraph(selection) {
       .attr('fill', 'black')
       .attr('transform', `rotate(-90)`)
       .attr('text-anchor', 'middle')
-      .text("Waiting time (in min.)");
+      .text("Minutes");
 
   svg
     .append("g")

@@ -106,7 +106,7 @@ ui <- navbarPage(
     shinyjs::useShinyjs(),
     selected = "App",
     tabPanel("App", app()),
-    tabPanel("About", includeMarkdown("about.md")),
+    tabPanel("About", div(class = "markdown")), # , includeMarkdown("about.md")
     tags$script(type = "module", src = "app.js"),
     tags$script(type = "module", src = "graph.js"),
     tags$script(type = "module", src = "animation.js")
@@ -237,10 +237,13 @@ server <- function(input, output, session) {
             relevantData <- na.omit(patientStatsUnpooled)
         }
         
-        relevantData <- tail(relevantData, lastPatients) # last 20 completed patients
+        
         if (patientType != "") {
             relevantData <- subset(relevantData, type == patientType)
         }
+        
+        relevantData <- tail(relevantData, lastPatients) # last e.g. 20 completed patients
+        
         if (nrow(relevantData) > 0) {
             relevantTime <- relevantData$startMedical - relevantData$arrivalTime
             mean(relevantTime)

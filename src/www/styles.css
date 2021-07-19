@@ -25,6 +25,16 @@
     font-size: 2em;
 }
 
+.title {
+    font-size: 1.5em;
+}
+
 pre {
     margin: 10px 0 10px;
+}
+
+.markdown {
+    width: 750px;
+    margin: 0 auto;
+    background: #f8f8f8;
 }
