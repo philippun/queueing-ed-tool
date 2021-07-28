@@ -1,23 +1,24 @@
+<pre>
 # queueing-ed-tool
 An educational tool about the effects of pooling on queueing systems for healthcare management.
 
 src/  
-├── www/  
-    ├── animation.js  
+ ├── www/  
+      ├── animation.js  
     ├── animation_background.svg  
     ├── app.js  
     ├── doctor.svg  
     ├── graph.js  
     ├── styles.css  
     └── wall.svg  
-├── about.md  
-└── app.R  
+ ├── about.md  
+ └── app.R  
 README.md  
 
 
-**src** Directory with the source code.
+**src/** Directory with the source code.
 
-**www** Directory containing the files that eventually end up in the users browser
+**www/** Directory containing the files that eventually end up in the users browser
 
 **animation.js** JavaScript file contating the D3 animation.
 
@@ -40,3 +41,4 @@ README.md
 **about.md** A markdown file that is incorporated in the running app as a tab containing about information.
 
 **app.R** The Shiny application containing the interface layout and simulation model.
+</pre>
