@@ -1,7 +1,7 @@
-<pre>
 # queueing-ed-tool
 An educational tool about the effects of pooling on queueing systems for healthcare management.
 
+<pre>
 src/  
  ├── www/  
       ├── animation.js  
@@ -14,6 +14,7 @@ src/
  ├── about.md  
  └── app.R  
 README.md  
+</pre>
 
 
 **src/** Directory with the source code.
@@ -41,4 +42,3 @@ README.md
 **about.md** A markdown file that is incorporated in the running app as a tab containing about information.
 
 **app.R** The Shiny application containing the interface layout and simulation model.
-</pre>
