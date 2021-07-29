@@ -1,5 +1,6 @@
 library(shiny)
 library(jsonlite)
+library(markdown)
 
 ################
 ### START UI ###
@@ -12,14 +13,14 @@ settings <- function() {
         h4("Green Patients"),
         sliderInput(
             "arrivalRateX",
-            "Arrival rate:",
+            "Arrival rate (per hour):",
             min = 1,
             max = 50,
             value = 9
         ),
         sliderInput(
             "serviceRateX",
-            "Service rate:",
+            "Service rate (per hour):",
             min = 1,
             max = 60,
             value = 11
@@ -27,54 +28,59 @@ settings <- function() {
         h4("Blue Patients"),
         sliderInput(
             "arrivalRateY",
-            "Arrival rate:",
+            "Arrival rate (per hour):",
             min = 1,
             max = 50,
             value = 9
         ),
         sliderInput(
             "serviceRateY",
-            "Service rate:",
+            "Service rate (per hour):",
             min = 1,
             max = 60,
             value = 11
         ),
         a(id = "toggleAdditionalSettings", "Additional settings", href = "#"),
-        shinyjs::hidden(
-            div(id = "additionalSettings",
-                sliderInput(
-                    "lastPatients",
-                    "Number patients for statistical calculations:",
-                    min = 3,
-                    max = 30,
-                    value = 20
-                )
+        shinyjs::hidden(div(
+            id = "additionalSettings",
+            sliderInput(
+                "lastPatients",
+                "Number of patients who recently finished their appointment and over which the graph statistics are calculated:",
+                min = 3,
+                max = 30,
+                value = 20
+            ),
+            sliderInput(
+                "truncFactor",
+                "Truncation factor at which the generated inter-arrival time is bounded (in comparison to the mean):",
+                min = 1,
+                max = 10,
+                value = 4
             )
-        )
-        # h4("Additional settings"),
-        # sliderInput(
-        #     "lastPatients",
-        #     "Number patients for statistical calculations:",
-        #     min = 3,
-        #     max = 30,
-        #     value = 20
-        # )
+        ))
     )
 }
 
 scenarios <- function() {
     tabPanel(
         "Scenarios",
-        h3("...")
+        h3("Select and click one: "),
+        actionButton("scenario1", "Scenario 1", width = "100%"),
+        actionButton("scenario2", "Scenario 2", width = "100%"),
+        actionButton("scenario3", "Scenario 3", width = "100%")
         )
 }
 
 app <- function() {
     sidebarLayout(
         sidebarPanel(
-            checkboxInput("play",
-                          "Play/Pause",
-                          value = TRUE),
+            actionButton("play",
+                          "Play/Pause", width = "100%"),
+            actionButton("reset", "Reset", width = "100%"),
+            selectInput("animation_speed",
+                        "Speed:",
+                        c("Slow", "Medium", "Fast"),
+                        selected = "Medium"),
             tabsetPanel(settings(),
                         scenarios()),
             width = 2),
@@ -93,8 +99,6 @@ app <- function() {
                        div(class="top", div(class="animation-pooled")), 
                        div(class="bottom", div(class="graph-pooled")))
             ),
-            #div(class="top", div(class="animation"), div(class="statusinfo", "content needed")),
-            #div(class="bottom", div(class="graph")),
             width = 10
         ))
 }
@@ -106,7 +110,7 @@ ui <- navbarPage(
     shinyjs::useShinyjs(),
     selected = "App",
     tabPanel("App", app()),
-    tabPanel("About", div(class = "markdown")), # , includeMarkdown("about.md")
+    tabPanel("About", div(class = "markdown", includeMarkdown("about.md"))), # , includeMarkdown("about.md")
     tags$script(type = "module", src = "app.js"),
     tags$script(type = "module", src = "graph.js"),
     tags$script(type = "module", src = "animation.js")
@@ -125,15 +129,21 @@ server <- function(input, output, session) {
     slowRate <- 110000
     
     # initial variables
+    play <- TRUE
     clock <- as.double(0)
     arrivalCountUnpooled <- 0
     arrivalCountPooled <- 0
     scheduledCount <- 0
     progressionRate <- mediumRate
     
-    arrivalRate <- c(X = isolate(input$arrivalRateX), Y = isolate(input$arrivalRateY))
-    serviceRate <- c(X = isolate(input$serviceRateX), Y = isolate(input$serviceRateY))
+    arrivalRate <-
+        c(X = isolate(input$arrivalRateX),
+          Y = isolate(input$arrivalRateY))
+    serviceRate <-
+        c(X = isolate(input$serviceRateX),
+          Y = isolate(input$serviceRateY))
     lastPatients <- isolate(input$lastPatients)
+    truncFactor <- isolate(input$truncFactor)
     
     # set up waiting queues and future event list (FEL)
     waitingQueueUnpooled <- data.frame(id = integer(), type = integer())
@@ -144,9 +154,11 @@ server <- function(input, output, session) {
                    type = integer(),
                    pooled = logical())
     
-    # vector for saving which patient is currently at doctor; set up idle doctors
-    doctorCareUnpooled <- c(X = NA, Y = NA)
-    doctorCarePooled <- c(X = NA, Y = NA)
+    # vector for saving which patient is currently at which doctor; set up idle doctors
+    doctorOfficesUnpooled <-
+        data.frame(id = as.integer(c(NA, NA)), type = as.integer(c(NA, NA)))
+    doctorOfficesPooled <-
+        data.frame(id = as.integer(c(NA, NA)), type = as.integer(c(NA, NA)))
     
     
     ## dataframes for holding statistics ##
@@ -214,10 +226,10 @@ server <- function(input, output, session) {
             endMedical = as.double(NA))
         if (pooled) {
             patientStatsPooled <<- rbind(patientStatsPooled, patient)
-            patientStatsPooled <<- tail(patientStatsPooled, 80) # privacy regulations
+            patientStatsPooled <<- tail(patientStatsPooled, 50) # privacy regulations
         } else {
             patientStatsUnpooled <<- rbind(patientStatsUnpooled, patient)
-            patientStatsUnpooled <<- tail(patientStatsUnpooled, 80) # privacy regulations
+            patientStatsUnpooled <<- tail(patientStatsUnpooled, 50) # privacy regulations
         }
     }
     
@@ -269,7 +281,7 @@ server <- function(input, output, session) {
                 queuedPatientsY = calcQueueLength(2, F)
             )
             systemStatsPooled <<- rbind(systemStatsPooled, currentSystemPooled)
-            systemStatsPooled <<- tail(systemStatsPooled, 80)
+            systemStatsPooled <<- tail(systemStatsPooled, 50)
         } else {
             currentSystemUnpooled <- data.frame(
                 time = clock,
@@ -277,17 +289,19 @@ server <- function(input, output, session) {
                 queuedPatientsY = calcQueueLength(2, F)
             )
             systemStatsUnpooled <<- rbind(systemStatsUnpooled, currentSystemUnpooled)
-            systemStatsUnpooled <<- tail(systemStatsUnpooled, 80)
+            systemStatsUnpooled <<- tail(systemStatsUnpooled, 50)
         }
     }
     
     calcAvgPatientsInQueue <- function(pooled) {
         if (pooled) {
-            queuedPatients <- systemStatsPooled$queuedPatientsX + systemStatsPooled$queuedPatientsY
+            queuedPatients <-
+                systemStatsPooled$queuedPatientsX + systemStatsPooled$queuedPatientsY
             queuedPatients <- tail(queuedPatients, lastPatients)
             mean(queuedPatients)
         } else {
-            queuedPatients <- systemStatsUnpooled$queuedPatientsX + systemStatsUnpooled$queuedPatientsY
+            queuedPatients <-
+                systemStatsUnpooled$queuedPatientsX + systemStatsUnpooled$queuedPatientsY
             queuedPatients <- tail(queuedPatients, lastPatients)
             mean(queuedPatients)
         }
@@ -302,10 +316,10 @@ server <- function(input, output, session) {
         
         if (pooled) {
             statisticsPooled <<- rbind(statisticsPooled, newRow)
-            statisticsPooled <<- tail(statisticsPooled, 80)
+            statisticsPooled <<- tail(statisticsPooled, 50)
         } else {
             statisticsUnpooled <<- rbind(statisticsUnpooled, newRow)
-            statisticsUnpooled <<- tail(statisticsUnpooled, 80)
+            statisticsUnpooled <<- tail(statisticsUnpooled, 50)
         }
         
     }
@@ -319,7 +333,7 @@ server <- function(input, output, session) {
     genInterArrivalTime <- function(type) {
         rate <- arrivalRate[type]
         
-        trunc <- 4
+        trunc <- truncFactor
         num <- rexp(1, rate = rate)
         if (num > (trunc * 1 / rate)) {
             (trunc * 1 / rate)
@@ -356,91 +370,72 @@ server <- function(input, output, session) {
     }
     
     # enqueues a new patient arrival
-    enqueue <- function(type, pooled) {
-        if (!pooled) {
-            newPatient <- c(arrivalCountUnpooled, type)
-            newPatient <-
-                data.frame(matrix(newPatient, ncol = 2, nrow = 1))
-            colnames(newPatient) <- c('id', 'type')
-            waitingQueueUnpooled <<- rbind(waitingQueueUnpooled, newPatient)
-        } else {
-            newPatient <- c(arrivalCountPooled, type)
-            newPatient <-
-                data.frame(matrix(newPatient, ncol = 2, nrow = 1))
-            colnames(newPatient) <- c('id', 'type')
-            waitingQueuePooled <<- rbind(waitingQueuePooled, newPatient)
-        }
+    enqueueUnpooled <- function(type) {
+        newPatient <- c(arrivalCountUnpooled, type)
+        newPatient <-
+            data.frame(matrix(newPatient, ncol = 2, nrow = 1))
+        colnames(newPatient) <- c('id', 'type')
+        waitingQueueUnpooled <<- rbind(waitingQueueUnpooled, newPatient)
+    }
+    
+    enqueuePooled <- function(type) {
+        newPatient <- c(arrivalCountPooled, type)
+        newPatient <-
+            data.frame(matrix(newPatient, ncol = 2, nrow = 1))
+        colnames(newPatient) <- c('id', 'type')
+        waitingQueuePooled <<- rbind(waitingQueuePooled, newPatient)
     }
     
     # dequeues a patient
     # considers if queues are currently pooled or not
-    dequeue <- function(type, currentlyPooled) {
-        if (currentlyPooled) {
-            patientId <- waitingQueuePooled[1, 1]
-            doctorCarePooled[type] <<- patientId
-            waitingQueuePooled <<- waitingQueuePooled[-c(1), ] #changed into Pooled
-            logPatientTime(patientId, "startMedical", clock, T)
-        } else {
-            for (i in 1:nrow(waitingQueueUnpooled)) {
-                print("test")
-                if (waitingQueueUnpooled[i, "type"] == type) {
-                    # print(paste0("Took in patient of type ", waitingQueue[i,2]))
-                    patientId <- waitingQueueUnpooled[i, 1]
-                    doctorCareUnpooled[type] <<- patientId
-                    waitingQueueUnpooled <<- waitingQueueUnpooled[-c(i), ]
-                    logPatientTime(patientId, "startMedical", clock, F)
-                    break
-                }
+    dequeueUnpooled <- function(doctor) {
+        for (i in 1:nrow(waitingQueueUnpooled)) {
+            if (waitingQueueUnpooled[i, "type"] == doctor) {
+                # print(paste0("Took in patient of type ", waitingQueue[i,2]))
+                
+                patientId <- waitingQueueUnpooled[i, 'id']
+                patientType <- waitingQueueUnpooled[i, 'type']
+                doctorOfficesUnpooled[doctor, 'id'] <<- patientId
+                doctorOfficesUnpooled[doctor, 'type'] <<- patientType
+                waitingQueueUnpooled <<- waitingQueueUnpooled[-c(i), ]
+                logPatientTime(patientId, "startMedical", clock, F)
+                break
             }
         }
     }
     
-    # check if a patient is waiting
-    # considers if queues are currently pooled or not
-    isPatientWaiting <- function(type, currentlyPooled) {
-        if (currentlyPooled) {
-            nrow(waitingQueuePooled) > 0
-        } else {
-            any(waitingQueueUnpooled$type == type)
-        }
+    dequeuePooled <- function(doctor) {
+        patientId <- waitingQueuePooled[1, 'id']
+        patientType <- waitingQueuePooled[1, 'type']
+        doctorOfficesPooled[doctor, 'id'] <<- patientId
+        doctorOfficesPooled[doctor, 'type'] <<- patientType
+        waitingQueuePooled <<- waitingQueuePooled[-c(1), ] #changed into Pooled
+        logPatientTime(patientId, "startMedical", clock, T)
     }
     
-    # calcQueueMax <- function() {
-    #     if (pooled) {
-    #         2 * queueMax
-    #     } else {
-    #         queueMax
-    #     }
-    # }
+    # check if a patient is waiting
+    # considers if queues are currently pooled or not
+    isPatientWaitingUnpooled <- function(type) {
+        any(waitingQueueUnpooled$type == type)
+    }
+    
+    isPatientWaitingPooled <- function() {
+        nrow(waitingQueuePooled) > 0
+    }
     
     # patient arrival
     modelArrival <- function(type) {
-        # if (currentlyPooled) {
-        #     if (nrow(waitingQueue) < 2 * queueMax) {
-        #         arrivalCount <<- arrivalCount + 1
-        #         enqueue(type)
-        #         logPatient(arrivalCount, type)
-        #         logPatientTime(arrivalCount, "arrivalTime", clock)
-        #     }
-        # } else {
-        #     if (calcQueueLength(type) < queueMax) {
-        #         arrivalCount <<- arrivalCount + 1
-        #         enqueue(type)
-        #         logPatient(arrivalCount, type)
-        #         logPatientTime(arrivalCount, "arrivalTime", clock)
-        #     }
-        # }
         
         if (calcQueueLength(type, F) < queueMax) {
             arrivalCountUnpooled <<- arrivalCountUnpooled + 1
-            enqueue(type, F)
+            enqueueUnpooled(type)
             logPatient(arrivalCountUnpooled, type, F)
             logPatientTime(arrivalCountUnpooled, "arrivalTime", clock, F)
         }
         
         if (calcQueueLength(type, T) < 2 * queueMax) {
             arrivalCountPooled <<- arrivalCountPooled + 1
-            enqueue(type, T)
+            enqueuePooled(type)
             logPatient(arrivalCountPooled, type, T)
             logPatientTime(arrivalCountPooled, "arrivalTime", clock, T)
         }
@@ -449,29 +444,32 @@ server <- function(input, output, session) {
             addArrivalEvent(type) # schedule next arrival
             scheduledCount <<- scheduledCount + 1
         }
+        
     }
     
     # patient departure
-    modelDepartureUnpooled <- function(type) {
-        logPatientTime(doctorCareUnpooled[type], "endMedical", clock, F)
+    modelDepartureUnpooled <- function(doctor) {
+        logPatientTime(doctorOfficesUnpooled[doctor, 'id'], "endMedical", clock, F)
         logSystem(F)
         extendStatistics(F)
         
         data <- toJSON(statisticsUnpooled)
         session$sendCustomMessage("update-graph-unpooled", data)
         
-        doctorCareUnpooled[type] <<- NA
+        doctorOfficesUnpooled[doctor, 'id'] <<- NA
+        doctorOfficesUnpooled[doctor, 'type'] <<- NA
     }
     
-    modelDeparturePooled <- function(type) {
-        logPatientTime(doctorCarePooled[type], "endMedical", clock, T)
+    modelDeparturePooled <- function(doctor) {
+        logPatientTime(doctorOfficesPooled[doctor, 'id'], "endMedical", clock, T)
         logSystem(T)
         extendStatistics(T)
 
         data <- toJSON(statisticsPooled)
         session$sendCustomMessage("update-graph-pooled", data)
         
-        doctorCarePooled[type] <<- NA
+        doctorOfficesPooled[doctor, 'id'] <<- NA
+        doctorOfficesPooled[doctor, 'type'] <<- NA
     }
     
     ##################################
@@ -495,12 +493,22 @@ server <- function(input, output, session) {
         
         # A Phase
         clock <<- as.numeric(futureEventList[1, 1])
-        #currentlyPooled <- pooled
         
-        while (futureEventList[1, 1] == clock) { # some bug here where the FEL can be empty?
+        while (futureEventList[1, 1] == clock) {
             event <- futureEventList[1,]
             futureEventList <<- futureEventList[-c(1), ] # remove current event from FEL
-            print(paste0("Time: ", clock))
+            print(
+                paste0(
+                    "Time: ",
+                    clock * 60,
+                    " | System (pooled?): ",
+                    event[1,]$pooled,
+                    " | B-Event: ",
+                    event[1,]$event,
+                    " | Type: ",
+                    event[1,]$type
+                )
+            )
             
             # B Phase
             if (event[1, ]$event == "arrival") {
@@ -517,49 +525,58 @@ server <- function(input, output, session) {
         
         
         # C Phase
-        if (is.na(doctorCareUnpooled['X']) &&
-            isPatientWaiting(1, F)) {
-            dequeue(1, F) # "X" before
-            addDepartureEvent(1, F) # schedule next departure unpooled
+        # check for doctor 1 in unpooled system
+        if (is.na(doctorOfficesUnpooled[1, 'id']) &&
+            isPatientWaitingUnpooled(1)) {
+            dequeueUnpooled(1) # "X" before
+            addDepartureEvent(1, pool = F) # schedule next departure unpooled
         }
-        if (is.na(doctorCareUnpooled['Y']) &&
-            isPatientWaiting(2, F)) {
-            dequeue(2, F) # "Y" before
-            addDepartureEvent(2, F) # schedule next departure unpooled
+        # check for doctor 2 in unpooled system
+        if (is.na(doctorOfficesUnpooled[2, 'id']) &&
+            isPatientWaitingUnpooled(2)) {
+            dequeueUnpooled(2) # "Y" before
+            addDepartureEvent(2, pool = F) # schedule next departure unpooled
         }
-        if (is.na(doctorCarePooled['X']) &&
-            isPatientWaiting(1, T)) {
-            dequeue(1, T) # "X" before
-            addDepartureEvent(1, T) # schedule next departure pooled
+        # check for doctor 1 in pooled system
+        if (is.na(doctorOfficesPooled[1, 'id']) &&
+            isPatientWaitingPooled()) {
+            dequeuePooled(1) # "X" before
+            addDepartureEvent(1, pool = T) # schedule next departure pooled
         }
-        if (is.na(doctorCarePooled['Y']) &&
-            isPatientWaiting(2, T)) {
-            dequeue(2, T) # "Y" before
-            addDepartureEvent(2, T) # schedule next departure pooled
+        # check for doctor 2 in pooled system
+        if (is.na(doctorOfficesPooled[2, 'id']) &&
+            isPatientWaitingPooled()) {
+            dequeuePooled(2) # "Y" before
+            addDepartureEvent(2, pool = T) # schedule next departure pooled
         }
         
         
         timeUntilNextEvent <<- futureEventList[1, 1] - clock
-        print(paste0("Until next: ", timeUntilNextEvent))
-        if (input$play) {
+        input$play
+        if (play) {
             timing <- timeUntilNextEvent * progressionRate
-            # print(paste0("Timing: ", progressionRate))
             invalidateLater(timing)
-        } else {
-            #print(patientStats)
         }
         
         # send state of system to JS
         gettingMedical <-
-            data.frame(id = as.integer(c(doctorCareUnpooled['X'], doctorCareUnpooled['Y'])), type = as.integer(c(-1, -2)))
-        gettingMedical <- na.omit(gettingMedical)
+            data.frame(id = as.integer(c(
+                doctorOfficesUnpooled[1, 'id'], doctorOfficesUnpooled[2, 'id']
+            )), type = as.integer(c(
+                doctorOfficesUnpooled[1, 'type'], doctorOfficesUnpooled[2, 'type']
+            )))
+        #gettingMedical <- na.omit(gettingMedical)
         data <- rbind(gettingMedical, waitingQueueUnpooled)
         data <- toJSON(data)
         session$sendCustomMessage("update-animation-unpooled", data)
         
         gettingMedical <-
-            data.frame(id = as.integer(c(doctorCarePooled['X'], doctorCarePooled['Y'])), type = as.integer(c(-1, -2)))
-        gettingMedical <- na.omit(gettingMedical)
+            data.frame(id = as.integer(c(
+                doctorOfficesPooled[1, 'id'], doctorOfficesPooled[2, 'id']
+            )), type = as.integer(c(
+                doctorOfficesPooled[1, 'type'], doctorOfficesPooled[2, 'type']
+            )))
+        #gettingMedical <- na.omit(gettingMedical)
         data <- rbind(gettingMedical, waitingQueuePooled)
         data <- toJSON(data)
         session$sendCustomMessage("update-animation-pooled", data)
@@ -569,6 +586,18 @@ server <- function(input, output, session) {
     ## END SIMULATION RUN ##
     ########################
     
+    observe({
+        if (input$animation_speed == "Slow") {
+            progressionRate <<- slowRate
+            print("Speed set to slow")
+        } else if (input$animation_speed == "Medium") {
+            progressionRate <<- mediumRate
+            print("Speed set to medium")
+        } else if (input$animation_speed == "Fast") {
+            progressionRate <<- fastRate
+            print("Speed set to fast")
+        }
+    })
     
     observe({
         arrivalRate['X'] <<- input$arrivalRateX
@@ -578,6 +607,7 @@ server <- function(input, output, session) {
         pooled <<- input$pooled
         variability <<- input$variability
         lastPatients <<- input$lastPatients
+        truncFactor <<- input$truncFactor
         
         output$performancePooled <- renderText("")
         output$performanceUnpooled <- renderText("")
@@ -626,6 +656,39 @@ server <- function(input, output, session) {
         
         out <- renderText(paste0("Mean waiting time average patient: ", round(EWqP, 2)))
         output$performancePooled <- out
+    })
+    
+    observeEvent(input$play, {
+        if (play) {
+            play <<- FALSE
+        } else {
+            play <<- TRUE
+        }
+    })
+    
+    observeEvent(input$reset, {
+        #remove all events from FEL, expel patients and delete statistics
+        waitingQueueUnpooled <<- waitingQueueUnpooled[0, ]
+        waitingQueuePooled <<- waitingQueuePooled[0, ]
+        futureEventList <<- futureEventList[0, ]
+        
+        doctorOfficesUnpooled <<- data.frame(id = as.integer(c(NA, NA)), type = as.integer(c(NA, NA)))
+        doctorOfficesPooled <<- data.frame(id = as.integer(c(NA, NA)), type = as.integer(c(NA, NA)))
+        
+        statisticsUnpooled <<-  statisticsUnpooled[0, ]
+        patientStatsUnpooled <<- patientStatsUnpooled[0, ]
+        systemStatsUnpooled <<- systemStatsUnpooled[0, ]
+        statisticsPooled <<- statisticsPooled[0, ]
+        patientStatsPooled <<- patientStatsPooled[0, ]
+        systemStatsPooled <<- systemStatsPooled[0, ]
+        
+        arrivalCountPooled <<- 0
+        arrivalCountUnpooled <<- 0
+        
+        #add new arrival events
+        addArrivalEvent(1)
+        addArrivalEvent(2)
+        scheduledCount <- 2
     })
     
     shinyjs::onclick("toggleAdditionalSettings",

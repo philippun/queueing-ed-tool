@@ -13,13 +13,13 @@ const yValueWaitingY = (d) => d.avgWaitingTimeY * 60;
 
 const xScaleBand = d3
   .scaleBand()
-  .domain(d3.range(0, 99))
+  .domain(d3.range(0, 69))
   .range([0, graphInnerWidth])
   .padding(0.1);
 
 const xScalePoint = d3
   .scalePoint()
-  .domain(d3.range(0, 99))
+  .domain(d3.range(0, 69))
   .range([0, graphInnerWidth])
   .padding(0.5);
 
