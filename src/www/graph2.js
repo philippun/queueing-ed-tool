@@ -1,3 +1,6 @@
+// File containing the creation of D3 graph that is currently used!
+// See this: https://bost.ocks.org/mike/chart/ by Mike Bostok for understanding code structure
+
 export const graph = () => {
   let height = 350;
   let width = 850;

@@ -1,3 +1,5 @@
+// File for the creation of the animations with D3
+
 // constants for animation at top
 const animationHeight = 350; //320;
 const animationWidth = 850;
@@ -19,6 +21,7 @@ const colorScale = d3
   .domain([1, 2, -1, -2])
   .range(["green", "steelblue"]);
 
+// only called once at the beginning
 export function renderInfrastructure(selection, numberQueues, pooled) {
   const xPosition = (d, i) => {
     if (pooled) {
@@ -118,6 +121,7 @@ export function renderInfrastructure(selection, numberQueues, pooled) {
     .attr("y2", -10);
 }
 
+// only called once at the beginning
 export function setUpAnimation(selection) {
   //append svg to designated element
   let svg = selection //.animation div created in Shiny
@@ -161,6 +165,7 @@ export function setUpAnimation(selection) {
   hospital.append("g").attr("class", "patients");
 }
 
+// called by renderPatientPosition
 function renderPatientEmoji(selection) {
   // Patient appearance
   selection
@@ -226,6 +231,7 @@ function renderPatientEmoji(selection) {
     .attr("y", 60);
 }
 
+// called every time the animation and positions are updated
 export function renderPatientPosition(selection, patients, numberPatientTypes, pooled) {
   let svg = selection.select(".patients");
 

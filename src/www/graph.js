@@ -1,3 +1,5 @@
+// Old file for creating the graph! Not in use anymore! See graph2.js
+
 // constants for graph at bottom
 const graphHeight = 350;
 const graphWidth = 850;

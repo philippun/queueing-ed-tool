@@ -6,6 +6,8 @@ library(markdown)
 ### START UI ###
 ################
 
+# UI elements of the settings section with a tab panel for settings itself
+# and one for scenarios
 settings <- function() {
     tabPanel(
         "Settings",
@@ -15,7 +17,7 @@ settings <- function() {
             "arrivalRateX",
             "Arrival rate (per hour):",
             min = 1,
-            max = 50,
+            max = 60,
             value = 9
         ),
         sliderInput(
@@ -30,7 +32,7 @@ settings <- function() {
             "arrivalRateY",
             "Arrival rate (per hour):",
             min = 1,
-            max = 50,
+            max = 60,
             value = 9
         ),
         sliderInput(
@@ -40,6 +42,7 @@ settings <- function() {
             max = 60,
             value = 11
         ),
+        # additional settings that are hidden by default
         a(id = "toggleAdditionalSettings", "Additional settings", href = "#"),
         shinyjs::hidden(div(
             id = "additionalSettings",
@@ -61,6 +64,7 @@ settings <- function() {
     )
 }
 
+# content of the scenarios settings tab panel
 scenarios <- function() {
     tabPanel(
         "Scenarios",
@@ -71,6 +75,7 @@ scenarios <- function() {
         )
 }
 
+# overall strucutre of the app(lication) site of the educational tool
 app <- function() {
     sidebarLayout(
         sidebarPanel(
@@ -103,6 +108,7 @@ app <- function() {
         ))
 }
 
+# ui function as required by Shiny and that defines the toplevel UI
 ui <- navbarPage(
     "Queueing Education Tool",
     tags$head(tags$script(src = "https://d3js.org/d3.v5.min.js"),
@@ -121,7 +127,7 @@ ui <- navbarPage(
 #############################
 
 server <- function(input, output, session) {
-    # constants
+    # constants for simulation
     queueMax <- 10
     arrivalMax <- 10000
     fastRate <- 50000
@@ -233,6 +239,7 @@ server <- function(input, output, session) {
         }
     }
     
+    # adds a time of a specific patient to a specific column
     logPatientTime <- function(id, col, time, pooled) {
         if (pooled) {
             patientStatsPooled[patientStatsPooled$id == id, col] <<- time
@@ -242,6 +249,8 @@ server <- function(input, output, session) {
         
     }
     
+    # calculates the average waiting time of all patients of a specific type
+    # or all patients
     calcAvgWaitingTime <- function(patientType = "", pooled) { 
         if (pooled) {
             relevantData <- na.omit(patientStatsPooled)
@@ -265,6 +274,8 @@ server <- function(input, output, session) {
         
     }
     
+    # calculated the current queue length of a specific patient type in either
+    # unpooled or pooled system
     calcQueueLength <- function(patientType, pooled) {
         if (pooled) {
             nrow(waitingQueuePooled)
@@ -273,6 +284,7 @@ server <- function(input, output, session) {
         }
     }
     
+    # adds statistics of either pooled or unpooled system to the logs
     logSystem <- function(pooled) {
         if (pooled) {
             currentSystemPooled <- data.frame(
@@ -293,6 +305,8 @@ server <- function(input, output, session) {
         }
     }
     
+    # calculated average patients in queue of either pooled or unpooled system 
+    # from already collected statistics
     calcAvgPatientsInQueue <- function(pooled) {
         if (pooled) {
             queuedPatients <-
@@ -307,6 +321,7 @@ server <- function(input, output, session) {
         }
     }
     
+    # extends all statistics of either pooled or unpooled system with the averages
     extendStatistics <- function(pooled) {
         newRow <- data.frame(
             avgWaitingTimeX = calcAvgWaitingTime(1, pooled),
@@ -342,7 +357,7 @@ server <- function(input, output, session) {
         }
     }
     
-    # add a new event to the Future Event List
+    # add a new arrival event to the Future Event List
     addArrivalEvent <- function(type) {
         newEvent <-
             data.frame(
@@ -356,6 +371,7 @@ server <- function(input, output, session) {
             futureEventList[order(futureEventList$time),]
     }
     
+    # add a new departure even to the FEL
     addDepartureEvent <- function(type, pool) {
         newEvent <-
             data.frame(
@@ -369,7 +385,7 @@ server <- function(input, output, session) {
             futureEventList[order(futureEventList$time),]
     }
     
-    # enqueues a new patient arrival
+    # enqueues a newly arrived patient to unpooled system
     enqueueUnpooled <- function(type) {
         newPatient <- c(arrivalCountUnpooled, type)
         newPatient <-
@@ -378,6 +394,7 @@ server <- function(input, output, session) {
         waitingQueueUnpooled <<- rbind(waitingQueueUnpooled, newPatient)
     }
     
+    # enqueues a newly arrived patient to pooled system
     enqueuePooled <- function(type) {
         newPatient <- c(arrivalCountPooled, type)
         newPatient <-
@@ -386,8 +403,7 @@ server <- function(input, output, session) {
         waitingQueuePooled <<- rbind(waitingQueuePooled, newPatient)
     }
     
-    # dequeues a patient
-    # considers if queues are currently pooled or not
+    # dequeues a patient from unpooled system 
     dequeueUnpooled <- function(doctor) {
         for (i in 1:nrow(waitingQueueUnpooled)) {
             if (waitingQueueUnpooled[i, "type"] == doctor) {
@@ -404,6 +420,7 @@ server <- function(input, output, session) {
         }
     }
     
+    # dequeues a patient from pooled system
     dequeuePooled <- function(doctor) {
         patientId <- waitingQueuePooled[1, 'id']
         patientType <- waitingQueuePooled[1, 'type']
@@ -413,17 +430,17 @@ server <- function(input, output, session) {
         logPatientTime(patientId, "startMedical", clock, T)
     }
     
-    # check if a patient is waiting
-    # considers if queues are currently pooled or not
+    # check if a patient is waiting in unpooled system
     isPatientWaitingUnpooled <- function(type) {
         any(waitingQueueUnpooled$type == type)
     }
     
+    # checks if a patient is waiting in pooled system
     isPatientWaitingPooled <- function() {
         nrow(waitingQueuePooled) > 0
     }
     
-    # patient arrival
+    # executes all necessary things for patient arrival
     modelArrival <- function(type) {
         
         if (calcQueueLength(type, F) < queueMax) {
@@ -447,7 +464,7 @@ server <- function(input, output, session) {
         
     }
     
-    # patient departure
+    # executes all necessary things for patient departure in unpooled system
     modelDepartureUnpooled <- function(doctor) {
         logPatientTime(doctorOfficesUnpooled[doctor, 'id'], "endMedical", clock, F)
         logSystem(F)
@@ -460,6 +477,7 @@ server <- function(input, output, session) {
         doctorOfficesUnpooled[doctor, 'type'] <<- NA
     }
     
+    # executes all necessary things for patient departure in pooled system
     modelDeparturePooled <- function(doctor) {
         logPatientTime(doctorOfficesPooled[doctor, 'id'], "endMedical", clock, T)
         logSystem(T)
@@ -483,17 +501,18 @@ server <- function(input, output, session) {
     ##########################
     
     # simulation initialization
-    addArrivalEvent(1) # 2nd argument was "X" before
-    addArrivalEvent(2) # "Y"
+    addArrivalEvent(1) # add arrival of type 1
+    addArrivalEvent(2) # add arrival of type 2
     scheduledCount <- 2
     
     # simulation main loop
     observe({
         # invalidateLater(timeUntilNextEvent * progressionRate)
         
-        # A Phase
+        # A Phase of advancing clock
         clock <<- as.numeric(futureEventList[1, 1])
         
+        # exectute all B events scheduled at current time
         while (futureEventList[1, 1] == clock) {
             event <- futureEventList[1,]
             futureEventList <<- futureEventList[-c(1), ] # remove current event from FEL
@@ -510,7 +529,7 @@ server <- function(input, output, session) {
                 )
             )
             
-            # B Phase
+            # B Phase | model the specific event
             if (event[1, ]$event == "arrival") {
                 modelArrival(event[1, ]$type)
             } else if (event[1, ]$event == "departure" && event[1, ]$pooled == F) {
@@ -525,58 +544,58 @@ server <- function(input, output, session) {
         
         
         # C Phase
-        # check for doctor 1 in unpooled system
+        # check if doctor 1 in unpooled system is idle and patient waiting
         if (is.na(doctorOfficesUnpooled[1, 'id']) &&
             isPatientWaitingUnpooled(1)) {
             dequeueUnpooled(1) # "X" before
             addDepartureEvent(1, pool = F) # schedule next departure unpooled
         }
-        # check for doctor 2 in unpooled system
+        # check if doctor 2 in unpooled system is idle and patient waiting
         if (is.na(doctorOfficesUnpooled[2, 'id']) &&
             isPatientWaitingUnpooled(2)) {
             dequeueUnpooled(2) # "Y" before
             addDepartureEvent(2, pool = F) # schedule next departure unpooled
         }
-        # check for doctor 1 in pooled system
+        # check if doctor 1 in pooled system is idle and patient waiting
         if (is.na(doctorOfficesPooled[1, 'id']) &&
             isPatientWaitingPooled()) {
             dequeuePooled(1) # "X" before
             addDepartureEvent(1, pool = T) # schedule next departure pooled
         }
-        # check for doctor 2 in pooled system
+        # check if doctor 2 in pooled system is idle and patient waiting
         if (is.na(doctorOfficesPooled[2, 'id']) &&
             isPatientWaitingPooled()) {
             dequeuePooled(2) # "Y" before
             addDepartureEvent(2, pool = T) # schedule next departure pooled
         }
         
-        
+        # calculate time till next event and schedule execution of the overall
+        # reactive function
         timeUntilNextEvent <<- futureEventList[1, 1] - clock
         input$play
-        if (play) {
+        if (play) { # if paused then do not schedule next execution
             timing <- timeUntilNextEvent * progressionRate
             invalidateLater(timing)
         }
         
-        # send state of system to JS
+        # send state of unpooled system to JS for animation
         gettingMedical <-
             data.frame(id = as.integer(c(
                 doctorOfficesUnpooled[1, 'id'], doctorOfficesUnpooled[2, 'id']
             )), type = as.integer(c(
                 doctorOfficesUnpooled[1, 'type'], doctorOfficesUnpooled[2, 'type']
             )))
-        #gettingMedical <- na.omit(gettingMedical)
         data <- rbind(gettingMedical, waitingQueueUnpooled)
         data <- toJSON(data)
         session$sendCustomMessage("update-animation-unpooled", data)
         
+        # send state of pooled system to JS for animation
         gettingMedical <-
             data.frame(id = as.integer(c(
                 doctorOfficesPooled[1, 'id'], doctorOfficesPooled[2, 'id']
             )), type = as.integer(c(
                 doctorOfficesPooled[1, 'type'], doctorOfficesPooled[2, 'type']
             )))
-        #gettingMedical <- na.omit(gettingMedical)
         data <- rbind(gettingMedical, waitingQueuePooled)
         data <- toJSON(data)
         session$sendCustomMessage("update-animation-pooled", data)
@@ -586,6 +605,7 @@ server <- function(input, output, session) {
     ## END SIMULATION RUN ##
     ########################
     
+    # observer for changing the run speed
     observe({
         if (input$animation_speed == "Slow") {
             progressionRate <<- slowRate
@@ -599,6 +619,7 @@ server <- function(input, output, session) {
         }
     })
     
+    # observer for changing the settings
     observe({
         arrivalRate['X'] <<- input$arrivalRateX
         arrivalRate['Y'] <<- input$arrivalRateY
@@ -613,10 +634,14 @@ server <- function(input, output, session) {
         output$performanceUnpooled <- renderText("")
     })
     
+    # calculate probability for arrival of patient type i
     probi <- function(type) {
         arrivalRate[type] / (arrivalRate['X'] + arrivalRate['Y'])
     }
     
+    # observer for outputting the performance/achievement measures unpooled
+    # based on van Dijk and van der Sluis (2008)
+    # these are exact results
     observeEvent(input$showPerformanceUnpooled, {
         rho1 <- arrivalRate['X'] / serviceRate['X']
         rho2 <- arrivalRate['Y'] / serviceRate['Y']
@@ -637,6 +662,9 @@ server <- function(input, output, session) {
         output$performanceUnpooled <- out
     })
     
+    # observer for outputting the performance/achievement measures pooled
+    # based on van Dijk and van der Sluis (2008)
+    # these are approximate results
     observeEvent(input$showPerformancePooled, {
         k_a <- arrivalRate['X'] / arrivalRate['Y']
         k_s <- serviceRate['X'] / serviceRate['Y']
@@ -658,6 +686,7 @@ server <- function(input, output, session) {
         output$performancePooled <- out
     })
     
+    # observer for the play/pause button
     observeEvent(input$play, {
         if (play) {
             play <<- FALSE
@@ -666,6 +695,8 @@ server <- function(input, output, session) {
         }
     })
     
+    # observer for the reset button
+    # if clicked, reset entire simulation and add initial events
     observeEvent(input$reset, {
         #remove all events from FEL, expel patients and delete statistics
         waitingQueueUnpooled <<- waitingQueueUnpooled[0, ]
@@ -685,12 +716,13 @@ server <- function(input, output, session) {
         arrivalCountPooled <<- 0
         arrivalCountUnpooled <<- 0
         
-        #add new arrival events
+        #add new initial arrival events
         addArrivalEvent(1)
         addArrivalEvent(2)
         scheduledCount <- 2
     })
     
+    # hide/show additional settings
     shinyjs::onclick("toggleAdditionalSettings",
                      shinyjs::toggle(id = "additionalSettings", anim = TRUE))
 }
