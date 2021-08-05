@@ -5,10 +5,12 @@ An educational tool about the effects of pooling on queueing systems for healthc
 src/  
  ├── www/  
       ├── animation.js  
+      ├── animation2.js 
       ├── animation_background.svg  
       ├── app.js  
       ├── doctor.svg  
-      ├── graph.js  
+      ├── graph.js 
+      ├── graph2.js 
       ├── styles.css  
       └── wall.svg  
  ├── about.md  

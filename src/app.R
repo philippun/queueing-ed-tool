@@ -69,9 +69,9 @@ scenarios <- function() {
     tabPanel(
         "Scenarios",
         h3("Select and click one: "),
-        actionButton("scenario1", "Scenario 1", width = "100%"),
-        actionButton("scenario2", "Scenario 2", width = "100%"),
-        actionButton("scenario3", "Scenario 3", width = "100%")
+        actionButton("scenario1", "Scenario 1 | k-factor = 10", width = "100%"),
+        actionButton("scenario2", "Scenario 2 | Equal 90% utilization", width = "100%"),
+        actionButton("scenario3", "Scenario 3 | Random", width = "100%")
         )
 }
 
@@ -86,20 +86,21 @@ app <- function() {
                         "Speed:",
                         c("Slow", "Medium", "Fast"),
                         selected = "Medium"),
-            tabsetPanel(settings(),
+            tabsetPanel(id = "settings_tabs",
+                        settings(),
                         scenarios()),
             width = 2),
         mainPanel(
             fluidRow(
                 column(6, 
                        tags$h3("Unpooled"), 
-                       actionButton("showPerformanceUnpooled", "Show mean waiting times"), 
+                       actionButton("showPerformanceUnpooled", "Show Expected Waiting Times"), 
                        verbatimTextOutput("performanceUnpooled", placeholder = T), 
                        div(class="top", div(class="animation-unpooled")), 
                        div(class="bottom", div(class="graph-unpooled"))),
                 column(6, 
                        tags$h3("Pooled"), 
-                       actionButton("showPerformancePooled", "Show mean waiting times"), 
+                       actionButton("showPerformancePooled", "Show Expected Waiting Times"), 
                        verbatimTextOutput("performancePooled", placeholder = T), 
                        div(class="top", div(class="animation-pooled")), 
                        div(class="bottom", div(class="graph-pooled")))
@@ -658,7 +659,7 @@ server <- function(input, output, session) {
         
         EWqA <- probi('X') * EWq1 + probi('Y') * EWq2
         
-        out <- renderText(paste0("Mean waiting time::: green patient: ", round(EWq1, 2), ", blue patient: ", round(EWq2, 2), ", average patient: ", round(EWqA, 2)))
+        out <- renderText(paste0("Green Patients: ", round(EWq1, 2), " min. | Blue Patients: ", round(EWq2, 2), " min. | Average Patients: ", round(EWqA, 2), " min."))
         output$performanceUnpooled <- out
     })
     
@@ -682,8 +683,35 @@ server <- function(input, output, session) {
             EWqP <- Inf
         }
         
-        out <- renderText(paste0("Mean waiting time average patient: ", round(EWqP, 2)))
+        out <- renderText(paste0("Average Patients: ", round(EWqP, 2), " min."))
         output$performancePooled <- out
+    })
+    
+    # observers for clicking scenario 1
+    observeEvent(input$scenario1, {
+        updateSliderInput(session, "arrivalRateX", value = 5)
+        updateSliderInput(session, "arrivalRateY", value = 50)
+        updateSliderInput(session, "serviceRateX", value = 6)
+        updateSliderInput(session, "serviceRateY", value = 60)
+        updateTabsetPanel(session, "settings_tabs", "Settings")
+    })
+    
+    # observers for clicking scenario 2
+    observeEvent(input$scenario2, {
+        updateSliderInput(session, "arrivalRateX", value = 27)
+        updateSliderInput(session, "arrivalRateY", value = 27)
+        updateSliderInput(session, "serviceRateX", value = 30)
+        updateSliderInput(session, "serviceRateY", value = 30)
+        updateTabsetPanel(session, "settings_tabs", "Settings")
+    })
+    
+    # observers for clicking scenario 3
+    observeEvent(input$scenario3, {
+        updateSliderInput(session, "arrivalRateX", value = floor(runif(1, min=1, max=60)))
+        updateSliderInput(session, "arrivalRateY", value = floor(runif(1, min=1, max=60)))
+        updateSliderInput(session, "serviceRateX", value = floor(runif(1, min=1, max=60)))
+        updateSliderInput(session, "serviceRateY", value = floor(runif(1, min=1, max=60)))
+        updateTabsetPanel(session, "settings_tabs", "Settings")
     })
     
     # observer for the play/pause button
