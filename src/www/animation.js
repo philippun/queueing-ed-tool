@@ -225,10 +225,11 @@ function renderPatientEmoji(selection) {
     .attr("y2", (24 / 16) * patientRadius)
     .attr("stroke-width", (1 / 16) * patientRadius)
     .attr("stroke", "white");
-  selection
+// only for debugging
+  /*selection
     .append("text")
     .text((d) => d.id)
-    .attr("y", 60);
+    .attr("y", 60);*/
 }
 
 // called every time the animation and positions are updated
